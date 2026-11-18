@@ -65,7 +65,6 @@
   .side .nm { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .side .rk { color: var(--faint); font-size: 12px; font-weight: 600; margin-right: 3px; }
   .side .rec { color: var(--faint); font-size: 12px; }
-  .side.pick .nm { text-decoration: underline; text-decoration-color: var(--good); text-decoration-thickness: 2.5px; text-underline-offset: 4px; }
   .side .ab { display: none; }
   .side .sc { font-variant-numeric: tabular-nums; font-weight: 750; font-size: 18px; margin: 0 4px; }
   .at { color: var(--faint); font-size: 12px; flex: none; }
@@ -241,17 +240,24 @@ function tugHTML(r) {
 
 function factsHTML(r) {
   const g = r.game;
-  // Under way: live odds, with where they started.
-  const odds = g.state === "in" && r.pNow != null
-    ? `Now: ${esc(nm(g.away))} ${FanScore.pct(1 - r.pNow)} · ${esc(nm(g.home))} ${FanScore.pct(r.pNow)} to win (was ${FanScore.pct(1 - r.p)}–${FanScore.pct(r.p)})`
-    : `${esc(nm(g.away))} ${FanScore.pct(1 - r.p)} · ${esc(nm(g.home))} ${FanScore.pct(r.p)} to win`;
-  return `<div class="facts">${odds}${g.spread ? " · " + esc(g.spread) : ""}${g.tv ? " · " + esc(g.tv) : ""}</div>`;
+  const fav = (p) => (p >= 0.5 ? [g.home, p] : [g.away, 1 - p]);
+  let odds;
+  if (g.state === "in" && r.pNow != null) {
+    const [t, p] = fav(r.pNow);
+    const was = t === g.home ? r.p : 1 - r.p;
+    odds = `Now: ${esc(nm(t))} ${FanScore.pct(p)} to win (was ${FanScore.pct(was)})`;
+  } else {
+    const [t, p] = fav(r.p);
+    odds = `${esc(nm(t))} ${FanScore.pct(p)} to win`;
+  }
+  return `<div class="facts">${odds}${g.spread && g.state !== "in" ? " · " + esc(g.spread) : ""}</div>`;
 }
 
 function cardHTML(r, opts = {}) {
   const g = r.game, live = g.state === "in";
   const li = opts.live;
   const when = live ? `<span class="pill live">LIVE</span> ${esc(g.status || "")}` : g.done ? "Final" : esc(kickoff(g));
+  const whenTv = when + (g.tv && !g.done ? ` · ${esc(g.tv)}` : "");
   let root;
   if (r.mine) root = `<b>Go ${esc(nm(r.pick))}</b>`;
   else if (r.pick) root = `Root for <b>${esc(nm(r.pick))}</b>`;
@@ -266,7 +272,7 @@ function cardHTML(r, opts = {}) {
     ? `<details class="why" data-id="${esc(key)}"${open}><summary>Why</summary>${r.split ? `<div class="splitline">${esc(r.split)}</div>` : ""}${tugHTML(r)}</details>` : "";
   const scored = live || (g.done && !g.canceled);
   return `<article class="card ${r.mine ? "mine" : ""} ${live ? "live" : ""} ${scored ? "scored" : ""} ${opts.pulse ? "hot" : ""}">
-    <div class="meta"><span>${when}</span>${split}<span class="right">${li && li.climbed >= 1 ? `<span class="climb" title="Up from ${esc(r.preStars)} stars before kickoff">▲ was ${esc(r.preStars)}</span> ` : ""}${starsHTML(r.stars)}</span></div>
+    <div class="meta"><span>${whenTv}</span>${split}<span class="right">${li && li.climbed >= 1 ? `<span class="climb" title="Up from ${esc(r.preStars)} stars before kickoff">▲ was ${esc(r.preStars)}</span> ` : ""}${starsHTML(r.stars)}</span></div>
     <div class="matchup">${sideHTML(r, "away")}<span class="at">${g.neutral ? "vs" : "at"}</span>${sideHTML(r, "home")}</div>
     ${hot}<div class="root">${root} ${going}</div>${reason}${factsHTML(r)}${detail}
   </article>`;
