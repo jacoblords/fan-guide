@@ -136,3 +136,23 @@ test("finished games score whether your pick won", () => {
   const r = S.scoreGame(ix, fan(ix), g);
   assert.strictEqual(r.result, "won");
 });
+
+test("live odds: a tie at kickoff keeps the line; a late deficit sinks the favorite", () => {
+  const ix = fixture();
+  const g = (o) => ({ home: "A", away: "B", pHome: 0.9, state: "in", ...o });
+  assert.ok(Math.abs(S.liveP(ix, g({ period: 1, clock: "15:00", homeScore: 0, awayScore: 0 })) - 0.9) < 0.01);
+  assert.ok(S.liveP(ix, g({ period: 4, clock: "3:00", homeScore: 10, awayScore: 17 })) < 0.1);
+  assert.strictEqual(S.liveP(ix, g({ liveP: 0.42, homeScore: 0, awayScore: 0 })), 0.42, "ESPN's live number wins");
+});
+
+test("live re-scoring: an upset under way in a game you care about climbs", () => {
+  const ix = fixture();
+  const pre = ix.data.games[1];
+  Object.assign(pre, { pHome: 0.9 });
+  const before = S.scoreGame(ix, fan(ix), pre);
+  const live = { ...pre, state: "in", period: 4, clock: "4:00", homeScore: 10, awayScore: 20 };
+  const after = S.scoreGame(ix, fan(ix), live);
+  assert.ok(after.pNow < 0.1);
+  assert.strictEqual(after.preStars, before.stars);
+  assert.ok(after.priority > before.priority * 1.2, `${after.priority} vs ${before.priority}`);
+});

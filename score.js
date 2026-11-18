@@ -100,6 +100,35 @@
     return sigmoid((f(g.home) - f(g.away) + (g.neutral ? 0 : 2.5)) / 7.5);
   }
 
+  // Normal CDF (Abramowitz-Stegun 7.1.26), accurate to about 1e-7.
+  function normCdf(x) {
+    const t = 1 / (1 + 0.3275911 * Math.abs(x) / Math.SQRT2);
+    const y = 1 - ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-(x * x) / 2);
+    return x >= 0 ? (1 + y) / 2 : (1 - y) / 2;
+  }
+  const MARGIN_SD = 14; // spread of a college game's final margin around the line, in points
+
+  /** Seconds of regulation left (overtime counts as five minutes). */
+  function secondsLeft(g) {
+    const period = g.period || 1;
+    const m = /^(\d+):(\d+)/.exec(g.clock || "");
+    const clock = m ? +m[1] * 60 + +m[2] : 900;
+    return period >= 5 ? 300 : (4 - period) * 900 + clock;
+  }
+
+  /** The home team's chance to win right now. ESPN's live number when the fetcher has it
+   * (`g.liveP`); otherwise the pre-game line, shrunk by the time left, plus the current margin. */
+  function liveP(ix, g) {
+    if (g.state !== "in") return pHome(ix, g);
+    if (g.liveP != null) return g.liveP;
+    if (g.homeScore == null) return pHome(ix, g);
+    const pre = Math.min(0.995, Math.max(0.005, pHome(ix, g)));
+    const line = (MARGIN_SD * Math.log(pre / (1 - pre))) / 1.702; // expected home margin before kickoff
+    const f = Math.max(secondsLeft(g) / 3600, 0.004);
+    const margin = g.homeScore - g.awayScore;
+    return normCdf((margin + line * f) / (MARGIN_SD * Math.sqrt(f)));
+  }
+
   // ---- signals -----------------------------------------------------------------------------
 
   function confSignal(ix, fan, g) {
@@ -326,8 +355,13 @@
 
   // ---- per game and per week --------------------------------------------------------------
 
+  /** Scores one game. Stakes (what each result does for the fan) come from the pre-game odds;
+   * how much the game deserves attention also depends on how likely those stakes are to come
+   * true, and for a game under way that uses the live odds. So a long-shot upset with real
+   * stakes climbs the list as it starts to happen. */
   function scoreGame(ix, fan, g) {
     const p = pHome(ix, g);
+    const pNow = liveP(ix, g);
     const mine = g.home === fan.team || g.away === fan.team;
     const raw = {
       conf: confSignal(ix, fan, g),
@@ -364,14 +398,20 @@
         split = `Split: ${forPick.label.toLowerCase()} says ${name(ix, pick)}, ${against.label.toLowerCase()} says ${name(ix, other)}. ${forPick.label} matters more here.`;
       }
     }
-    const u = 0.35 + 0.65 * Math.sqrt(4 * p * (1 - p));
+    const u = (q) => 0.35 + 0.65 * Math.sqrt(4 * q * (1 - q));
     const spec = spectacle(ix, g, p);
-    const priority = mine ? 100 : (Math.abs(total) + 0.5 * (spread - Math.abs(total))) * u + 0.25 * spec;
+    const stakes = Math.abs(total) + 0.5 * (spread - Math.abs(total));
+    // Live: still in doubt, or already swung a long way from what was expected (an upset that's
+    // actually happening is news even once it's nearly decided).
+    const liveFactor = g.state === "in" ? Math.max(u(pNow), Math.min(1, 0.35 + 0.9 * Math.abs(pNow - p))) : u(p);
+    const priority = mine ? 100 : stakes * liveFactor + 0.25 * spec;
+    const prePriority = mine ? 100 : stakes * u(p) + 0.25 * spec;
     const result = g.done && !g.canceled && g.winner && pick ? (g.winner === pick ? "won" : "lost") : null;
     const lead = signals[0];
     return {
-      game: g, p, pick, mine, total, priority,
+      game: g, p, pNow, pick, mine, total, priority,
       stars: mine ? null : Math.round(toStars(priority, OVERALL_STEPS) * 2) / 2,
+      preStars: mine ? null : Math.round(toStars(prePriority, OVERALL_STEPS) * 2) / 2,
       signals, conflict, split, spectacle: spec,
       group: mine ? "mine" : lead ? lead.key : null,
       reason: lead ? lead.short : null,
@@ -389,6 +429,7 @@
     let fives = 0;
     for (const r of rows) {
       if (r.stars === 5 && ++fives > MAX_FIVES) r.stars = 4.5;
+      if (r.preStars === 5 && r.stars < 5) r.preStars = Math.min(r.preStars, 4.5);
     }
     const decided = rows.filter((r) => r.result && !r.mine && r.stars >= 2);
     return {
@@ -444,7 +485,9 @@
     const pLeader = leader === g.home ? r.p : leader === g.away ? 1 - r.p : null;
     const upset = pLeader != null && pLeader < 0.35;
     const changes = g.leadChanges || 0;
+    // r.stars already reflects the live odds; the rest rewards drama the odds don't capture.
     const score = (r.mine ? 10 : r.stars || 0) * (0.4 + 0.6 * close * late) + (upset ? 1.5 * late : 0) + Math.min(1, changes * 0.2);
+    const climbed = !r.mine && r.stars != null && r.preStars != null ? r.stars - r.preStars : 0;
     let why = null;
     const q = period >= 5 ? "OT" : ["1st", "2nd", "3rd", "4th"][period - 1];
     if (upset && Math.abs(margin) > 0) why = `Upset watch: ${name(ix, leader)} leads in the ${q}`;
@@ -452,7 +495,7 @@
     else if (Math.abs(margin) <= 8 && period >= 4) why = `One-score game in the ${q}`;
     else if (changes >= 4) why = `${changes} lead changes`;
     const going = r.pick && leader ? (leader === r.pick ? "yes" : "no") : null;
-    return { score, why, hot: !!why && (r.mine || (r.stars || 0) >= 2 || (upset && late >= 1)), going, upset };
+    return { score, why, hot: !!why && (r.mine || (r.stars || 0) >= 2), going, upset, climbed };
   }
 
   /** Default rivals from rivals.json (by abbreviation), as team ids. */
@@ -461,7 +504,7 @@
     return ((t && rivalsJson[t.abbr]) || []).map((a) => ix.byAbbr.get(a)).filter(Boolean);
   }
 
-  const api = { SIGNALS, DEFAULT_WEIGHTS, STAR_STEPS, lines, toStars, index, pHome, name, scoreGame, scoreWeek, headline, liveInterest, defaultRivals, pct };
+  const api = { SIGNALS, DEFAULT_WEIGHTS, STAR_STEPS, lines, toStars, index, pHome, liveP, name, scoreGame, scoreWeek, headline, liveInterest, defaultRivals, pct };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.FanScore = api;
 })(typeof self !== "undefined" ? self : this);
