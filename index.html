@@ -247,7 +247,7 @@ function factsHTML(r) {
 function cardHTML(r, opts = {}) {
   const g = r.game, live = g.state === "in";
   const li = opts.live;
-  const when = live ? `<span class="pill live">LIVE</span> ${esc(g.status || "")}` : g.done ? "Final" : `${esc(kickoff(g))}${g.tv ? " · " + esc(g.tv) : ""}`;
+  const when = live ? `<span class="pill live">LIVE</span> ${esc(g.status || "")}` : g.done ? "Final" : esc(kickoff(g));
   let root;
   if (r.mine) root = `<b>Go ${esc(nm(r.pick))}</b>`;
   else if (r.pick) root = `Root for <b>${esc(nm(r.pick))}</b>`;
@@ -258,13 +258,13 @@ function cardHTML(r, opts = {}) {
   const hot = li && li.why ? `<div class="hotline">${esc(li.why)}</div>` : "";
   const key = g.id;
   const open = state.open.has(key) ? " open" : "";
-  const detail = r.signals.length || g.pHome != null
-    ? `<details class="why" data-id="${esc(key)}"${open}><summary>Why</summary>${r.split ? `<div class="splitline">${esc(r.split)}</div>` : ""}${tugHTML(r)}${factsHTML(r)}</details>` : "";
+  const detail = r.signals.length
+    ? `<details class="why" data-id="${esc(key)}"${open}><summary>Why</summary>${r.split ? `<div class="splitline">${esc(r.split)}</div>` : ""}${tugHTML(r)}</details>` : "";
   const scored = live || (g.done && !g.canceled);
   return `<article class="card ${r.mine ? "mine" : ""} ${live ? "live" : ""} ${scored ? "scored" : ""} ${opts.pulse ? "hot" : ""}">
     <div class="meta"><span>${when}</span>${split}<span class="right">${starsHTML(r.stars)}</span></div>
     <div class="matchup">${sideHTML(r, "away")}<span class="at">${g.neutral ? "vs" : "at"}</span>${sideHTML(r, "home")}</div>
-    ${hot}<div class="root">${root} ${going}</div>${reason}${detail}
+    ${hot}<div class="root">${root} ${going}</div>${reason}${factsHTML(r)}${detail}
   </article>`;
 }
 
