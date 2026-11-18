@@ -17,9 +17,9 @@ for the home team), from [`score.js`](score.js):
 | Conference reputation | Your league's non-conference results | Soft |
 | Rivals | Your rivals losing (pain: their title odds, ranking, bowl hopes, losing to their own rival, losing as the favorite), and other games that dent their title odds | Heart |
 
-The weighted signals add up to the pick. A game is **Conflicted** when strong signals point
+The weighted signals add up to the pick. A game is a **Split** when strong signals point
 different ways. A game's overall stars weigh the stakes by how uncertain the game is, plus a
-little for spectacle (ranked teams, a close line, prime time). Your own game is always first.
+little for spectacle (ranked teams, a close line, prime time); only three games a week get five. Your own game is always first, with no stars.
 Weights default to `DEFAULT_WEIGHTS` and fans can adjust them on the page; rivals default to
 [`rivals.json`](rivals.json) (by ESPN abbreviation) and fans can edit them. Both are kept in
 the browser.
