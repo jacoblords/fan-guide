@@ -199,3 +199,18 @@ test("rankings: if you've already won, the 'only if you lose' case has no effect
   const s = S.scoreGame(ix, fan(ix), ix.data.games.find((g) => g.id === "g5")).signals.find((x) => x.key === "rank");
   assert.ok(!s, "C can't pass X this week");
 });
+
+test("headline names both biggest games when they're within half a star", () => {
+  const ix = fixture();
+  const f = fan(ix, ["R"]);
+  const { rows } = S.scoreWeek(ix, f, 12);
+  const others = rows.filter((r) => !r.mine);
+  others.forEach((r, i) => { r.stars = [4.5, 4][i] ?? 1; });
+  let h = S.headline(ix, f, 12, rows);
+  assert.strictEqual(h.biggest.length, 2);
+  assert.match(h.talk, /^Two biggest games you're not in, about even: /);
+  others[1].stars = 3;
+  h = S.headline(ix, f, 12, rows);
+  assert.strictEqual(h.biggest.length, 1);
+  assert.match(h.talk, /^Biggest game you're not in: /);
+});

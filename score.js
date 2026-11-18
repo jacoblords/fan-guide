@@ -515,11 +515,15 @@
       const joined = list.length > 1 ? list.slice(0, -1).join(", ") + " and " + list[list.length - 1] : list[0];
       pull = pull ? `${pull}, and pull for ${joined}.` : `Pull for ${joined}.`;
     } else if (pull) pull += ".";
-    const big = rows.find((r) => !r.mine && r.stars >= 3);
-    const talk = big
-      ? `Biggest game you're not in: ${name(ix, big.game.away)} at ${name(ix, big.game.home)}. ${big.reason}.`
-      : null;
-    return { stake, pull, picks, talk };
+    // The biggest game you're not in; when the next one is within half a star, both, since the
+    // order between them is closer to a coin flip than a ranking.
+    const others = rows.filter((r) => !r.mine && !(r.game.done && r.game.winner) && r.stars >= 3);
+    const big = others.slice(0, others.length > 1 && others[1].stars >= others[0].stars - 0.5 ? 2 : 1);
+    const matchup = (r) => `${name(ix, r.game.away)} ${r.game.neutral ? "vs" : "at"} ${name(ix, r.game.home)}`;
+    let talk = null;
+    if (big.length === 2) talk = `Two biggest games you're not in, about even: ${matchup(big[0])} and ${matchup(big[1])}.`;
+    else if (big.length) talk = `Biggest game you're not in: ${matchup(big[0])}. ${big[0].reason}.`;
+    return { stake, pull, picks, talk, biggest: big.map((r) => r.game.id) };
   }
 
   /** Live interest: how much a game in progress deserves attention right now. Rewards games
