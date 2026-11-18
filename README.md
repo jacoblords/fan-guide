@@ -72,6 +72,7 @@ python3 -m http.server 8765
 
 ## Not done yet
 
+- **Live data:** ESPN answers `fetch.py`'s current User-Agent with 403, so the deploy keeps the published data (or, the first time, the committed test data) when the fetch fails. Title Paths' format, `name (github actions; hourly-ish)`, is accepted.
 - A committee model to replace the ranking and résumé heuristics, backtested against the CFP's weekly rankings.
 - Real live updates: polling (or Title Paths' live-scores worker), in-game win-probability charts, and lead-change counts. `fetch.py` already records state, period, clock, in-game scores and ESPN's win-probability chart; the page still needs to poll for them during games.
 - Postseason and bowl weeks.

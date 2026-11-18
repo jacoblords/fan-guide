@@ -26,7 +26,18 @@ jobs:
       - id: pages
         uses: actions/configure-pages@v5
       - run: curl -sf -o prev.json "${{ steps.pages.outputs.base_url }}/data.json" || true
-      - run: python3 fetch.py --out data.json $( [ -s prev.json ] && echo --prev prev.json )
+      # Live data when ESPN answers; otherwise keep what's published, or the committed test data
+      # on the first deploy. (ESPN currently refuses fetch.py's User-Agent; see README.)
+      - name: Fetch
+        run: |
+          if python3 fetch.py --out live.json $( [ -s prev.json ] && echo --prev prev.json ); then
+            mv live.json data.json
+          elif [ -s prev.json ]; then
+            echo "::warning::Live fetch failed; keeping the published data"
+            cp prev.json data.json
+          else
+            echo "::warning::Live fetch failed; deploying the committed test data"
+          fi
       - run: mkdir -p site && cp index.html score.js rivals.json data.json site/
       - uses: actions/upload-pages-artifact@v3
         with: { path: site }

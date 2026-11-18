@@ -1,0 +1,19 @@
+name: ci
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: node --test test/
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Fetcher compiles
+        run: python3 -m py_compile fetch.py tools/fixture_from_titlepaths.py
+      - name: Data file is valid
+        run: python3 -c "import json; d = json.load(open('data.json')); assert d['games'] and d['teams']"
