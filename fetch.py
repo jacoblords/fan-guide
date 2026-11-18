@@ -7,6 +7,7 @@ Visitors never call ESPN; this runs on a schedule and the page reads the file it
 Usage: python3 fetch.py [--out data.json] [--season 2026] [--now 2026-11-18T12:00Z]
 """
 import argparse
+import bisect
 import datetime as dt
 import json
 import sys
@@ -154,6 +155,68 @@ def fetch_prediction(gid):
         return gid, None
 
 
+WP_POINTS = 120  # win-probability points kept per game: plenty for a 300px chart
+
+
+def play_seconds(play):
+    """Game time at a play, in seconds from kickoff: 15-minute quarters; overtime (no clock in
+    college) gets two minutes a period after regulation. Same as Title Paths' fetch_data.py."""
+    period = ((play.get("period") or {}).get("number")) or 1
+    if period > 4:
+        return 3600 + (period - 4) * 120
+    m, _, sec = ((play.get("clock") or {}).get("displayValue") or "15:00").partition(":")
+    try:
+        left = int(m) * 60 + int(sec or 0)
+    except ValueError:
+        left = 900
+    return (period - 1) * 900 + max(0, 900 - left)
+
+
+def in_order(pts):
+    """The points on the longest run of plays whose game time never goes back: ESPN files a play
+    out of place now and then, and its odds belong to some other moment. Same as Title Paths'."""
+    tails, ends, prev = [], [], []
+    for i, (t, _) in enumerate(pts):
+        k = bisect.bisect_right(tails, t)
+        prev.append(ends[k - 1] if k else -1)
+        if k == len(tails):
+            tails.append(t); ends.append(i)
+        else:
+            tails[k], ends[k] = t, i
+    keep, i = [], ends[-1] if ends else -1
+    while i >= 0:
+        keep.append(i); i = prev[i]
+    return [pts[i] for i in reversed(keep)]
+
+
+def fetch_winprob(gid):
+    """ESPN's in-game win probability for one game: up to WP_POINTS [seconds from kickoff, home
+    win odds in thousandths] points, plus whether ESPN calls the game over."""
+    try:
+        d = get(f"{SITE}/summary?event={gid}")
+    except Exception as e:  # noqa: BLE001 - one game's chart shouldn't stop the run
+        print(f"  win probability {gid} unavailable: {e}", file=sys.stderr)
+        return gid, None
+    drives = d.get("drives") or {}
+    plays = {}
+    for dr in (drives.get("previous") or []) + ([drives["current"]] if drives.get("current") else []):
+        for pl in dr.get("plays") or []:
+            plays[pl.get("id")] = pl
+    pts = []
+    for w in d.get("winprobability") or []:
+        pl = plays.get(w.get("playId"))
+        if pl is None or w.get("homeWinPercentage") is None:
+            continue
+        pts.append([play_seconds(pl), round(w["homeWinPercentage"] * 1000)])
+    pts = in_order(pts)
+    if len(pts) > WP_POINTS:
+        keep = sorted({round(k * (len(pts) - 1) / (WP_POINTS - 1)) for k in range(WP_POINTS)})
+        pts = [pts[k] for k in keep]
+    comp = ((d.get("header") or {}).get("competitions") or [{}])[0]
+    stype = (comp.get("status") or {}).get("type") or {}
+    return gid, {"pts": pts, "final": bool(stype.get("completed"))}
+
+
 def fetch_fpi(season):
     pi = get(f"{CORE}/seasons/{season}/powerindex?limit=300")
     fpi = {}
@@ -223,6 +286,7 @@ def main():
     ap.add_argument("--out", default="data.json")
     ap.add_argument("--season", type=int)
     ap.add_argument("--now", help="pretend it is this UTC time (testing)")
+    ap.add_argument("--prev", help="the previously published data.json, to reuse finished games' charts")
     args = ap.parse_args()
     now = parse(args.now) if args.now else dt.datetime.now(dt.timezone.utc)
     season = args.season or (now.year if now.month >= 3 else now.year - 1)
@@ -239,6 +303,23 @@ def main():
     preds = dict(pmap(fetch_prediction, [g["id"] for g in upcoming]))
     for g in games:
         g["pHome"] = preds.get(g["id"])
+
+    # Win-probability charts for this week's games under way or over. A finished game's chart is
+    # taken from the previous run when it has one, so each is fetched once after the final.
+    prev_wp = {}
+    if args.prev:
+        try:
+            with open(args.prev) as f:
+                prev_wp = {g["id"]: g["wp"] for g in json.load(f).get("games", []) if (g.get("wp") or {}).get("final")}
+        except (OSError, ValueError) as e:
+            print(f"  previous data unreadable: {e}", file=sys.stderr)
+    started = [g for g in games if g["week"] == week and (g["state"] == "in" or g["done"]) and not g["canceled"]]
+    need = [g["id"] for g in started if g["id"] not in prev_wp]
+    wps = dict(pmap(fetch_winprob, need))
+    for g in started:
+        wp = prev_wp.get(g["id"]) or wps.get(g["id"])
+        if wp and len(wp["pts"]) >= 2:
+            g["wp"] = wp
 
     fpi = fetch_fpi(season)
     rankings = fetch_rankings(season)

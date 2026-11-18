@@ -117,10 +117,12 @@
   }
 
   /** The home team's chance to win right now. ESPN's live number when the fetcher has it
-   * (`g.liveP`); otherwise the pre-game line, shrunk by the time left, plus the current margin. */
+   * (`g.liveP`, or the last point of the `g.wp` chart); otherwise the pre-game line, shrunk by the time left, plus the current margin. */
   function liveP(ix, g) {
     if (g.state !== "in") return pHome(ix, g);
     if (g.liveP != null) return g.liveP;
+    const pts = g.wp && g.wp.pts;
+    if (pts && pts.length) return pts[pts.length - 1][1] / 1000; // ESPN's latest in-game number
     if (g.homeScore == null) return pHome(ix, g);
     const pre = Math.min(0.995, Math.max(0.005, pHome(ix, g)));
     const line = (MARGIN_SD * Math.log(pre / (1 - pre))) / 1.702; // expected home margin before kickoff

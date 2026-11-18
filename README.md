@@ -45,6 +45,12 @@ games whose strong signals disagree, with a sentence saying which wins. Rivals a
 behind the gear. `?demo=live` fakes finished and in-progress games for this week, to see the
 game-day layout without real scores.
 
+The look follows [Title Paths](https://titlepaths.com) so the two read as siblings: its fonts
+(Barlow Condensed for headings, Inter for text), its colors, its stacked away-over-home team rows,
+its ESPN / r/CFB / X links, and its in-game win-probability chart (`wpChart`, drawn from ESPN's
+play-by-play odds that `fetch.py` collects for games under way, as Title Paths' fetcher does). A
+live game's re-scoring uses the chart's latest point; without one it estimates from the score.
+
 ## Data
 
 [`fetch.py`](fetch.py) writes `data.json`: every game with an FBS team this season (ESPN
@@ -67,6 +73,6 @@ python3 -m http.server 8765
 ## Not done yet
 
 - A committee model to replace the ranking and résumé heuristics, backtested against the CFP's weekly rankings.
-- Real live updates: polling (or Title Paths' live-scores worker), in-game win-probability charts, and lead-change counts. `fetch.py` already records state, period, clock and in-game scores.
+- Real live updates: polling (or Title Paths' live-scores worker), in-game win-probability charts, and lead-change counts. `fetch.py` already records state, period, clock, in-game scores and ESPN's win-probability chart; the page still needs to poll for them during games.
 - Postseason and bowl weeks.
 - A real name and domain.

@@ -156,3 +156,9 @@ test("live re-scoring: an upset under way in a game you care about climbs", () =
   assert.strictEqual(after.preStars, before.stars);
   assert.ok(after.priority > before.priority * 1.2, `${after.priority} vs ${before.priority}`);
 });
+
+test("live odds come from the last point of ESPN's chart when there is one", () => {
+  const ix = fixture();
+  const g = { home: "A", away: "B", pHome: 0.9, state: "in", period: 2, clock: "5:00", homeScore: 0, awayScore: 0, wp: { pts: [[0, 900], [1500, 612]], final: false } };
+  assert.strictEqual(S.liveP(ix, g), 0.612);
+});
