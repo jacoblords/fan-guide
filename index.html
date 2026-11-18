@@ -503,9 +503,12 @@ function demoLive(d) {
   });
 }
 
+// Demo game day: from ?demo=live, or the footer's toggle (where the address can't carry it).
+let demo = params.get("demo") === "live";
+
 async function boot() {
   const [d, rv] = await Promise.all([fetch("data.json", { cache: "no-cache" }).then((r) => r.json()), fetch("rivals.json").then((r) => r.json())]);
-  if (params.get("demo") === "live") demoLive(d);
+  if (demo) demoLive(d);
   DATA = d; RIVALS = rv; IX = FanScore.index(d);
   const byConf = {};
   for (const t of d.teams.filter((t) => t.pickable)) (byConf[t.conf] ||= []).push(t);
@@ -514,15 +517,21 @@ async function boot() {
     .map((c) => `<optgroup label="${esc(cname(c))}">` + byConf[c].sort((a, b) => a.short.localeCompare(b.short)).map((t) => `<option value="${esc(t.id)}">${esc(t.short)}</option>`).join("") + `</optgroup>`).join("");
   state.week = d.week;
   const updated = new Date(d.fetchedAt.replace("Z", ":00Z")).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" });
-  $("#foot").innerHTML = `${d.fixture ? '<span class="badge">test data</span>' : ""}${params.get("demo") === "live" ? '<span class="badge">demo scores</span>' : ""}
+  $("#foot").innerHTML = `${d.fixture ? '<span class="badge">test data</span>' : ""}${demo ? '<span class="badge">demo scores</span>' : ""}
     Updated ${esc(updated)}. Win odds from ESPN, conference odds from <a href="https://titlepaths.com/">Title Paths</a>, rankings from the ${esc(d.poll.poll || "polls")}.
-    Ranking and record effects are estimates.`;
+    Ranking and record effects are estimates.
+    <div style="margin-top:8px"><button class="btn" id="demoToggle">${demo ? "Back to the real schedule" : "Preview game day (fake scores)"}</button></div>`;
   const fromHash = IX.byAbbr.get(decodeURIComponent(location.hash.slice(1)));
   const saved = store.get("team", null);
-  setTeam(fromHash || (IX.teams.has(saved) ? saved : d.teams.find((t) => t.pickable).id));
+  setTeam((state.team && IX.teams.has(state.team) && state.team) || fromHash || (IX.teams.has(saved) ? saved : d.teams.find((t) => t.pickable).id));
 }
 
 $("#team").addEventListener("change", (e) => setTeam(e.target.value));
+$("#foot").addEventListener("click", (e) => {
+  if (e.target.id !== "demoToggle") return;
+  demo = !demo;
+  boot().then(() => scrollTo(0, 0));
+});
 window.addEventListener("hashchange", () => { const id = IX && IX.byAbbr.get(decodeURIComponent(location.hash.slice(1))); if (id && id !== state.team) setTeam(id); });
 $("#hero").addEventListener("click", (e) => {
   if (e.target.id === "prev") { state.week--; render(); }
