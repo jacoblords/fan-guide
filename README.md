@@ -26,7 +26,9 @@ the browser.
 
 ## The page
 
-One page, with detail on demand, for both the casual fan and the die-hard:
+One page, with detail on demand, for both the casual fan and the die-hard. It's laid out like
+Title Paths' gameday: This week beside your game, card grids for live and must-watch games, the
+radar groups as cards side by side, and finals below; one column on phones.
 
 - **This week:** where your team stands in one sentence, who to pull for, and the biggest game
   you're not in (`headline()` in `score.js`).
@@ -42,8 +44,9 @@ One page, with detail on demand, for both the casual fan and the die-hard:
 A card shows the pick and its single strongest reason; **Why** opens a tug-of-war bar per signal
 (colored by the team it pulls toward), the numbers behind each, and the win odds. "⇄ Split" marks
 games whose strong signals disagree, with a sentence saying which wins. Rivals and weights live
-behind the gear. `?demo=live` fakes finished and in-progress games for this week, to see the
-game-day layout without real scores.
+behind the gear. `?demo=live` (or the footer's "Preview game day" button) makes up a Saturday around
+the picked team: its game live and close, its top games under way or final, and a ranked
+favorite trailing late to show a game climbing into Live now.
 
 The look follows [Title Paths](https://titlepaths.com) so the two read as siblings: its fonts
 (Barlow Condensed for headings, Inter for text), its colors, its stacked away-over-home team rows,
