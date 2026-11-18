@@ -19,7 +19,7 @@ from concurrent.futures import ThreadPoolExecutor
 SITE = "https://site.api.espn.com/apis/site/v2/sports/football/college-football"
 CORE = "https://sports.core.api.espn.com/v2/sports/football/leagues/college-football"
 TITLE_PATHS = "https://titlepaths.com/"
-UA = "fan-guide (scheduled fetch; a few dozen calls per run)"
+UA = "fan-guide (github actions; hourly-ish)"
 
 # ESPN conference ids. "p4" teams (plus Notre Dame) are the ones a fan can pick as their team.
 CONFS = {

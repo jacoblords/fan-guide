@@ -59,7 +59,7 @@ live game's re-scoring uses the chart's latest point; without one it estimates f
 [`fetch.py`](fetch.py) writes `data.json`: every game with an FBS team this season (ESPN
 scoreboard, one call a week), ESPN's matchup-predictor odds for this week's and next week's
 games, the CFP Top 25 (or the AP poll before it starts), FPI, and Title Paths' conference odds.
-Visitors only read the static file. [`.github/workflows/update.yml`](.github/workflows/update.yml)
+Visitors only read the static file. The fetcher identifies itself as `fan-guide (github actions; hourly-ish)`, the format ESPN accepts from Title Paths. [`.github/workflows/update.yml`](.github/workflows/update.yml)
 runs the tests, fetches and deploys to GitHub Pages.
 
 `tools/fixture_from_titlepaths.py` builds the same shape offline from Title Paths' published
@@ -75,7 +75,6 @@ python3 -m http.server 8765
 
 ## Not done yet
 
-- **Live data:** ESPN answers `fetch.py`'s current User-Agent with 403, so the deploy keeps the published data (or, the first time, the committed test data) when the fetch fails. Title Paths' format, `name (github actions; hourly-ish)`, is accepted.
 - A committee model to replace the ranking and résumé heuristics, backtested against the CFP's weekly rankings.
 - Real live updates: polling (or Title Paths' live-scores worker), in-game win-probability charts, and lead-change counts. `fetch.py` already records state, period, clock, in-game scores and ESPN's win-probability chart; the page still needs to poll for them during games.
 - Postseason and bowl weeks.
