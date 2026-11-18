@@ -39,7 +39,33 @@
   .picker select { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
   .picker .nm { font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .icon-btn { margin-left: auto; border: 1px solid var(--line); background: var(--card); border-radius: 999px; width: 34px; height: 34px; cursor: pointer; flex: none; }
-  main { max-width: 720px; margin: 0 auto; padding: 14px 16px 64px; }
+  main { max-width: 1240px; margin: 0 auto; padding: 16px 16px 64px; }
+  .bar { max-width: 1240px; }
+
+  /* Layout, like Title Paths' gameday: this week beside your game, then card grids for live
+     and must-watch games, the radar groups as cards side by side, and finals in two columns. */
+  .layout { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); column-gap: 16px;
+    grid-template-areas: "hero mine" "live live" "must must" "groups groups" "final final"; }
+  .side, .body { display: contents; }
+  #hero { grid-area: hero; } #mine { grid-area: mine; } #live { grid-area: live; }
+  #must { grid-area: must; } #groups { grid-area: groups; } #final { grid-area: final; }
+  #mine h2 { display: none; }
+  #mine .card { height: 100%; margin: 0; }
+  .layout:has(#mine:empty) #hero { grid-column: 1 / -1; } /* your game is live, up in Live now */
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+  .cards .card { margin: 0; }
+  .groupgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; align-items: start; }
+  .groupgrid details.group { margin: 0; }
+  .finals { padding: 0; overflow: hidden; display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); }
+  .finals .rowg { border-top: 0; border-bottom: 1px solid var(--line); margin-bottom: -1px; }
+
+  /* Phones: one column, in reading order. */
+  @media (max-width: 760px) {
+    .layout { display: flex; flex-direction: column; }
+    #hero { order: 1; } #live { order: 2; } #mine { order: 3; } #must { order: 4; } #groups { order: 5; } #final { order: 6; }
+    #mine h2 { display: flex; }
+    .groupgrid { grid-template-columns: minmax(0, 1fr); }
+  }
   img.logo { width: 28px; height: 28px; object-fit: contain; flex: none; }
   img.logo.sm { width: 20px; height: 20px; }
   img.logo.lg { width: 44px; height: 44px; }
@@ -60,12 +86,24 @@
   .tally { display: inline-block; margin-top: 10px; font-size: 13px; font-weight: 600; background: var(--chip); border-radius: 999px; padding: 2px 10px; }
 
   /* Cards */
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px 12px; margin-bottom: 8px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin-bottom: 10px; display: grid; gap: 10px; align-content: start; }
+  .card > * { margin: 0; }
+  .verdict { border-left: 3px solid var(--pick); background: color-mix(in srgb, var(--pick) 7%, transparent); border-radius: 0 8px 8px 0; padding: 7px 10px 8px; }
+  .verdict .root { margin: 0; }
+  .trow .odds { font-size: 13px; font-weight: 500; color: var(--muted); }
+  .cfoot { display: flex; justify-content: space-between; align-items: center; gap: 10px; border-top: 1px solid var(--line); padding-top: 9px; margin-top: auto; }
+  .cfoot .links { margin: 0; }
+  .whybtn { border: 0; background: none; padding: 0; cursor: pointer; font-size: 13px; color: var(--accent); }
+  .whybtn::after { content: " ▾"; }
+  .whybtn[aria-expanded="true"]::after { content: " ▴"; }
+  .whybody { margin-top: -2px; }
+  .whybody .tug { margin-top: 0; }
   .card.mine { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
-  .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 12.5px; color: var(--muted); }
+  .meta { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 8px; font-size: 12.5px; color: var(--muted); }
+  .meta .left { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
   .meta .pill { white-space: nowrap; }
   .meta .right { margin-left: auto; }
-  .teams { display: grid; gap: 3px; margin: 8px 0 6px; }
+  .teams { display: grid; gap: 6px; }
   .trow { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: 8px; align-items: center; font-weight: 600; }
   .trow img.logo { width: 24px; height: 24px; }
   .trow .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -88,11 +126,6 @@
   .stars .on { color: var(--star); } .stars .off { color: var(--star-off); }
   .stars .half { background: linear-gradient(90deg, var(--star) 50%, var(--star-off) 50%); -webkit-background-clip: text; background-clip: text; color: transparent; }
 
-  details.why { margin-top: 6px; }
-  details.why > summary { list-style: none; cursor: pointer; font-size: 13px; color: var(--accent); width: fit-content; }
-  details.why > summary::-webkit-details-marker { display: none; }
-  details.why > summary::after { content: " ▾"; }
-  details.why[open] > summary::after { content: " ▴"; }
   .splitline { font-size: 13.5px; margin: 8px 0 2px; color: var(--warn); }
   .tug { display: grid; grid-template-columns: minmax(90px, 130px) 1fr; gap: 2px 10px; align-items: center; margin-top: 8px; font-size: 13px; }
   .tug .ends { grid-column: 2; display: flex; justify-content: space-between; font-size: 11.5px; color: var(--faint); }
@@ -104,7 +137,7 @@
   .facts { margin-top: 6px; font-size: 12.5px; color: var(--muted); }
 
   /* In-game win probability, drawn like Title Paths' (and ESPN's) */
-  .wp { display: grid; gap: 2px; margin-top: 8px; }
+  .wp { display: grid; gap: 2px; }
   .wp-lab { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .wp-lab b { color: var(--ink); font-weight: 600; }
   .wp svg { display: block; width: 100%; height: 64px; border-block: 1px dotted var(--line); }
@@ -114,7 +147,7 @@
   .wp .l { fill: none; stroke: var(--ink); stroke-width: 1.5; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
   .wp-q { position: relative; height: 1.2em; font-size: 11px; color: var(--muted); }
   .wp-q span { position: absolute; transform: translateX(-50%); }
-  .links { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; margin-top: 6px; }
+  .links { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; }
 
   /* Live */
   .card.live { border-color: color-mix(in srgb, var(--live) 45%, var(--line)); }
@@ -131,11 +164,14 @@
   details.group > summary::-webkit-details-marker { display: none; }
   details.group > summary .gname { font-weight: 650; }
   details.group > summary .tagline { color: var(--muted); font-size: 13.5px; flex: 1; }
+  .groupgrid details.group > summary { flex-wrap: wrap; position: relative; padding-right: 30px; }
+  .groupgrid details.group > summary .tagline { flex-basis: 100%; font-size: 13px; }
+  .groupgrid details.group > summary::after { position: absolute; right: 14px; top: 11px; }
   details.group > summary::after { content: "▾"; color: var(--faint); }
   details.group[open] > summary::after { content: "▴"; }
   .rowg { border-top: 1px solid var(--line); padding: 8px 14px; }
   .rowg .l1 { display: flex; gap: 8px; align-items: center; font-size: 14px; }
-  .rowg .l1 .t { color: var(--faint); font-size: 12px; width: 82px; flex: none; white-space: nowrap; }
+  .rowg .l1 .t { color: var(--faint); font-size: 12px; min-width: 82px; flex: none; white-space: nowrap; }
   .rowg .l1 .s { margin-left: auto; }
   .rowg .l2 { color: var(--muted); font-size: 13px; padding-left: 90px; }
   .final .l1 .res { font-weight: 650; }
@@ -173,12 +209,18 @@
   </div>
 </header>
 <main>
-  <section class="hero" id="hero"></section>
-  <div id="live"></div>
-  <div id="mine"></div>
-  <div id="must"></div>
-  <div id="groups"></div>
-  <div id="final"></div>
+  <div class="layout">
+    <div class="side">
+      <section class="hero" id="hero"></section>
+      <div id="mine"></div>
+      <div id="final"></div>
+    </div>
+    <div class="body">
+      <div id="live"></div>
+      <div id="must"></div>
+      <div id="groups"></div>
+    </div>
+  </div>
   <footer id="foot"></footer>
 </main>
 <dialog id="tune">
@@ -242,8 +284,10 @@ function teamsHTML(r) {
   const row = (side) => {
     const id = g[side], t = T(id), sc = side === "home" ? g.homeScore : g.awayScore, osc = side === "home" ? g.awayScore : g.homeScore;
     const cls = g.done && g.winner ? (g.winner === id ? "won" : "lost") : scored && sc > osc ? "ahead" : "";
-    const you = r.pick === id ? `<span class="you">${r.mine ? "you" : "your pick"}</span>` : "";
-    return `<div class="trow ${cls}">${logo(id)}<span class="nm">${t.rank ? `<span class="rk">${esc(t.rank)}</span>` : ""}${esc(nm(id))}<span class="rec">${esc(rec(id))}</span>${you}</span><span class="sc">${scored ? esc(sc) : ""}</span></div>`;
+    const you = r.pick === id ? `<span class="you">${r.mine ? "you" : "pick"}</span>` : "";
+    const pSide = side === "home" ? r.p : 1 - r.p;
+    const right = scored ? esc(sc) : pSide >= 0.5 ? `<span class="odds" title="ESPN's odds of winning">${FanScore.pct(pSide)}</span>` : "";
+    return `<div class="trow ${cls}">${logo(id)}<span class="nm">${t.rank ? `<span class="rk">${esc(t.rank)}</span>` : ""}${esc(nm(id))}<span class="rec">${esc(rec(id))}</span>${you}</span><span class="sc">${right}</span></div>`;
   };
   return `<div class="teams">${row("away")}${row("home")}</div>`;
 }
@@ -323,26 +367,33 @@ function factsHTML(r) {
 }
 
 function cardHTML(r, opts = {}) {
-  const g = r.game, live = g.state === "in";
+  const g = r.game, live = g.state === "in", scored = live || (g.done && !g.canceled);
   const li = opts.live;
   const when = live ? `<span class="pill live">LIVE</span> ${esc(g.status || "")}` : g.done ? "Final" : esc(kickoff(g));
-  const whenTv = when + (g.tv && !g.done ? ` · ${esc(g.tv)}` : "");
+  const head = [when, g.tv && !g.done ? esc(g.tv) : "", g.spread && !scored ? esc(g.spread) : ""].filter(Boolean).join(" · ");
   let root;
-  if (r.mine) root = `<b>Go ${esc(nm(r.pick))}</b>`;
+  if (r.mine) root = `Go <b>${esc(nm(r.pick))}</b>`;
   else if (r.pick) root = `Root for <b>${esc(nm(r.pick))}</b>`;
   else root = `<span class="muted">No side to take</span>`;
   const going = li && li.going ? `<span class="pill ${li.going}">${li.going === "yes" ? "Going your way" : "Not going your way"}</span>` : "";
   const split = r.conflict ? `<span class="pill split" title="${esc(r.split || "Signals disagree")}">⇄ Split</span>` : "";
   const reason = r.reason ? `<div class="reason">${esc(r.reason)}${r.reason.endsWith(".") ? "" : "."}</div>` : "";
   const hot = li && li.why ? `<div class="hotline">${esc(li.why)}</div>` : "";
-  const key = g.id;
-  const open = state.open.has(key) ? " open" : "";
-  const detail = r.signals.length
-    ? `<details class="why" data-id="${esc(key)}"${open}><summary>Why</summary>${r.split ? `<div class="splitline">${esc(r.split)}</div>` : ""}${tugHTML(r)}</details>` : "";
+  const key = g.id, open = state.open.has(key);
+  const why = r.signals.length
+    ? `<button class="whybtn" data-why="${esc(key)}" aria-expanded="${open}">Why</button>` : "<span></span>";
+  const whyBody = r.signals.length
+    ? `<div class="whybody"${open ? "" : " hidden"}>${r.split ? `<div class="splitline">${esc(r.split)}</div>` : ""}${tugHTML(r)}</div>` : "";
+  const tint = r.pick ? esc(T(r.pick).color || "#888") : "var(--line)";
+  const climb = li && li.climbed >= 1 ? `<span class="climb" title="Up from ${esc(r.preStars)} stars before kickoff">▲ was ${esc(r.preStars)}</span> ` : "";
   return `<article class="card ${r.mine ? "mine" : ""} ${live ? "live" : ""} ${opts.pulse ? "hot" : ""}">
-    <div class="meta"><span>${whenTv}</span>${going}${split}<span class="right">${li && li.climbed >= 1 ? `<span class="climb" title="Up from ${esc(r.preStars)} stars before kickoff">▲ was ${esc(r.preStars)}</span> ` : ""}${starsHTML(r.stars)}</span></div>
+    <div class="meta"><span class="left">${head} ${going}${split}</span><span class="right">${climb}${starsHTML(r.stars)}</span></div>
     ${teamsHTML(r)}
-    ${hot}<div class="root">${root}</div>${reason}${live && g.wp ? wpChart(g) : factsHTML(r)}${detail}${live || r.mine ? linksHTML(g) : ""}
+    ${hot}
+    <div class="verdict" style="--pick:${tint}"><div class="root">${root}</div>${reason}</div>
+    ${live && g.wp ? wpChart(g) : live ? factsHTML(r) : ""}
+    <div class="cfoot">${why}${scored || r.mine || (r.stars || 0) >= 3 ? linksHTML(g) : ""}</div>
+    ${whyBody}
   </article>`;
 }
 
@@ -408,7 +459,7 @@ function render() {
   // Live games that didn't make the strip stay where they were, with their score.
   const upcoming = rows.filter((r) => !isFinal(r) && !shownIds.has(r.game.id));
   $("#live").innerHTML = liveShown.length
-    ? `<h2><span class="dot"></span> Live now</h2>` + liveShown.map((x) => cardHTML(x.r, { live: x.li, pulse: x.r.game.id === pulseId })).join("") : "";
+    ? `<h2><span class="dot"></span> Live now</h2><div class="cards">` + liveShown.map((x) => cardHTML(x.r, { live: x.li, pulse: x.r.game.id === pulseId })).join("") + `</div>` : "";
 
   const mine = upcoming.find((r) => r.mine);
   $("#mine").innerHTML = mine ? `<h2>Your game</h2>` + cardHTML(mine) : "";
@@ -419,20 +470,22 @@ function render() {
   const perGroup = {};
   const must = others.filter((r) => r.stars >= 3 && (perGroup[r.group] = (perGroup[r.group] || 0) + 1) <= 2).slice(0, 5);
   const mustSorted = [...must].sort((a, b) => a.game.date.localeCompare(b.game.date));
-  $("#must").innerHTML = must.length ? `<h2>Must-watch</h2>` + mustSorted.map((r) => cardHTML(r)).join("") : "";
+  $("#must").innerHTML = must.length ? `<h2>Must-watch</h2><div class="cards">` + mustSorted.map((r) => cardHTML(r)).join("") + `</div>` : "";
 
   const rest = others.filter((r) => !must.includes(r));
   const groups = {};
   for (const r of rest) (groups[r.group] ||= []).push(r);
   const order = ["conf", "rank", "rivals", "resume", "rep"];
-  $("#groups").innerHTML = rest.length ? `<h2>Also on your radar</h2>` + order.filter((k) => groups[k]).map((k) => {
+  // Radar groups start open, as cards side by side (on a phone too: they're short).
+  $("#groups").innerHTML = rest.length ? `<h2>Also on your radar</h2><div class="groupgrid">` + order.filter((k) => groups[k]).map((k) => {
     const list = groups[k].sort((a, b) => a.game.date.localeCompare(b.game.date));
     const sig = FanScore.SIGNALS.find((s) => s.key === k);
-    return `<details class="group" data-g="${k}"${state.open.has("g:" + k) ? " open" : ""}><summary><span class="gname">${esc(sig.group)}</span><span class="tagline">${esc(GROUP_TAGLINES[k])} · ${list.length} game${list.length > 1 ? "s" : ""}</span></summary>${list.map(compactHTML).join("")}</details>`;
-  }).join("") : "";
+    const open = !state.open.has("closed:" + k);
+    return `<details class="group" data-g="${k}"${open ? " open" : ""}><summary><span class="gname">${esc(sig.group)}</span><span class="tagline">${esc(GROUP_TAGLINES[k])} · ${list.length} game${list.length > 1 ? "s" : ""}</span></summary>${list.map(compactHTML).join("")}</details>`;
+  }).join("") + `</div>` : "";
 
   const finals = rows.filter(isFinal).filter((r) => r.mine || (r.stars || 0) >= 1).sort((a, b) => b.game.date.localeCompare(a.game.date));
-  $("#final").innerHTML = finals.length ? `<h2>Final</h2><div class="card" style="padding:0;overflow:hidden">${finals.map(finalHTML).join("")}</div>` : "";
+  $("#final").innerHTML = finals.length ? `<h2>Final</h2><div class="card finals">${finals.map(finalHTML).join("")}</div>` : "";
 }
 
 function renderPicker() {
@@ -464,43 +517,52 @@ function setTeam(tid) {
   render();
 }
 
-// Demo: pretend some of this week's games are over or under way, to see the Saturday layout.
-function demoLive(d) {
-  const wk = d.games.filter((g) => g.week === d.week && !g.done).sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
-  const hash = (s) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
+// Demo: a made-up Saturday built around the picked team, to see the game-day layout. Its own
+// game is live and close; its top-rated games are under way (one with the underdog leading late);
+// a ranked heavy favorite it doesn't care much about trails late, to show a game climbing into
+// Live now; and a few of its next games are already final (two went its way, one didn't).
+function demoLive(d, rv, team) {
   const ix = FanScore.index(d);
-  // One live game is a ranked heavy favorite trailing late: the kind of radar game that should
-  // climb into Live now.
-  const upsetId = wk.slice(6, 16).find((g) => { const p = FanScore.pHome(ix, g), fav = p >= 0.5 ? g.home : g.away;
-    return Math.max(p, 1 - p) >= 0.75 && (ix.teams.get(fav) || {}).rank; })?.id;
-  wk.forEach((g, i) => {
-    const p = FanScore.pHome(ix, g), fav = p >= 0.5 ? "home" : "away", h = hash(g.id);
-    if (i < 6) { // final
-      const wSide = i === 2 ? (fav === "home" ? "away" : "home") : fav;
-      const ws = 21 + (h % 21), ls = ws - 3 - (h % 14);
-      Object.assign(g, { done: true, winner: g[wSide], homeScore: wSide === "home" ? ws : ls, awayScore: wSide === "home" ? ls : ws });
-    } else if (i < 16) { // under way
-      const period = g.id === upsetId ? 4 : 1 + (h % 4), clock = `${1 + (h % 14)}:${String(h % 60).padStart(2, "0")}`;
-      let lead = (h % 15) - 4; // positive: the favorite leads
-      if (i === 8 || g.id === upsetId) { lead = -(3 + (h % 5)); }
-      const base = 6 * period + (h % 7);
-      const favScore = base + Math.max(lead, 0), dogScore = base + Math.max(-lead, 0);
-      Object.assign(g, { state: "in", period, clock, status: `${clock} - ${["1st", "2nd", "3rd", "4th"][period - 1]}`,
-        homeScore: fav === "home" ? favScore : dogScore, awayScore: fav === "home" ? dogScore : favScore, leadChanges: h % 6 });
-      // A made-up win-probability chart that ends at the estimate for the current score.
-      const elapsed = 3600 - (4 - period) * 900 - (900 - (1 + (h % 14)) * 60 - (h % 60));
-      const pts = [];
-      for (let t = 0, k = 0; t <= elapsed; t += 90, k++) {
-        const frac = t / Math.max(elapsed, 1);
-        const wobble = Math.round(Math.sin(k * 1.7 + (h % 9)) * 4 * (1 - frac));
-        const m = Math.round((g.homeScore - g.awayScore) * frac) + wobble;
-        const q = Math.min(4, 1 + Math.floor(t / 900)), left = 900 - (t % 900);
-        const at = { ...g, period: q, clock: `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`, homeScore: Math.max(0, m), awayScore: Math.max(0, -m), wp: null };
-        pts.push([t, Math.round(FanScore.liveP(ix, at) * 1000)]);
-      }
-      if (pts.length >= 2) g.wp = { pts, final: false };
+  const hash = (s) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
+  const fan = { team, rivals: FanScore.defaultRivals(ix, rv, team), rivalsOf: (r) => FanScore.defaultRivals(ix, rv, r) };
+  const rows = FanScore.scoreWeek(ix, fan, d.week).rows.filter((r) => !r.game.done);
+  const favOf = (g) => (FanScore.pHome(ix, g) >= 0.5 ? "home" : "away");
+  const live = (g, period, lead) => { // lead: points the favorite leads by (negative: the underdog leads)
+    const h = hash(g.id), fav = favOf(g), clock = `${1 + (h % 14)}:${String(h % 60).padStart(2, "0")}`;
+    const base = 6 * period + (h % 7);
+    const favScore = base + Math.max(lead, 0), dogScore = base + Math.max(-lead, 0);
+    Object.assign(g, { state: "in", period, clock, status: `${clock} - ${["1st", "2nd", "3rd", "4th"][period - 1]}`,
+      homeScore: fav === "home" ? favScore : dogScore, awayScore: fav === "home" ? dogScore : favScore, leadChanges: h % 6 });
+    // A win-probability chart that wanders toward the estimate for the current score.
+    const elapsed = (period - 1) * 900 + 900 - ((1 + (h % 14)) * 60 + (h % 60));
+    const pts = [];
+    for (let t = 0, k = 0; t <= elapsed; t += 90, k++) {
+      const frac = t / Math.max(elapsed, 1);
+      const m = Math.round((g.homeScore - g.awayScore) * frac + Math.sin(k * 1.7 + (h % 9)) * 4 * (1 - frac));
+      const q = Math.min(4, 1 + Math.floor(t / 900)), left = 900 - (t % 900);
+      const at = { ...g, period: q, clock: `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`, homeScore: Math.max(0, m), awayScore: Math.max(0, -m), wp: null };
+      pts.push([t, Math.round(FanScore.liveP(ix, at) * 1000)]);
     }
-  });
+    if (pts.length >= 2) g.wp = { pts, final: false };
+  };
+  const final = (g, winner) => {
+    const h = hash(g.id), w = winner === g.home ? "home" : "away";
+    const ws = 21 + (h % 21), ls = ws - 3 - (h % 14);
+    Object.assign(g, { done: true, winner: g[w], homeScore: w === "home" ? ws : ls, awayScore: w === "home" ? ls : ws });
+  };
+  const used = new Set();
+  const take = (r) => { used.add(r.game.id); return r.game; };
+  const mine = rows.find((r) => r.mine);
+  if (mine) live(take(mine), 3, 3);
+  const top = rows.filter((r) => !r.mine && (r.stars || 0) >= 2).slice(0, 7);
+  top.slice(0, 4).forEach((r, i) => live(take(r), 2 + (i % 3), i === 1 ? -6 : 4 + i * 3));
+  // Two of the finals went your way, one didn't.
+  top.slice(4, 7).forEach((r, i) => final(take(r), (i < 2) === (r.pick === r.game.home) ? r.game.home : r.game.away));
+  const climber = rows.find((r) => !used.has(r.game.id) && (r.stars || 0) < 2 && r.stars > 0 && (() => {
+    const p = FanScore.pHome(ix, r.game), fav = p >= 0.5 ? r.game.home : r.game.away;
+    return Math.max(p, 1 - p) >= 0.75 && (ix.teams.get(fav) || {}).rank;
+  })());
+  if (climber) live(take(climber), 4, -5);
 }
 
 // Demo game day: from ?demo=live, or the footer's toggle (where the address can't carry it).
@@ -508,7 +570,11 @@ let demo = params.get("demo") === "live";
 
 async function boot() {
   const [d, rv] = await Promise.all([fetch("data.json", { cache: "no-cache" }).then((r) => r.json()), fetch("rivals.json").then((r) => r.json())]);
-  if (demo) demoLive(d);
+  const pre = FanScore.index(d);
+  const fromHash = pre.byAbbr.get(decodeURIComponent(location.hash.slice(1)));
+  const saved = store.get("team", null);
+  const team = (state.team && pre.teams.has(state.team) && state.team) || fromHash || (pre.teams.has(saved) ? saved : d.teams.find((t) => t.pickable).id);
+  if (demo) demoLive(d, rv, team);
   DATA = d; RIVALS = rv; IX = FanScore.index(d);
   const byConf = {};
   for (const t of d.teams.filter((t) => t.pickable)) (byConf[t.conf] ||= []).push(t);
@@ -521,18 +587,17 @@ async function boot() {
     Updated ${esc(updated)}. Win odds from ESPN, conference odds from <a href="https://titlepaths.com/">Title Paths</a>, rankings from the ${esc(d.poll.poll || "polls")}.
     Ranking and record effects are estimates.
     <div style="margin-top:8px"><button class="btn" id="demoToggle">${demo ? "Back to the real schedule" : "Preview game day (fake scores)"}</button></div>`;
-  const fromHash = IX.byAbbr.get(decodeURIComponent(location.hash.slice(1)));
-  const saved = store.get("team", null);
-  setTeam((state.team && IX.teams.has(state.team) && state.team) || fromHash || (IX.teams.has(saved) ? saved : d.teams.find((t) => t.pickable).id));
+  setTeam(team);
 }
 
-$("#team").addEventListener("change", (e) => setTeam(e.target.value));
+const pickTeam = (id) => { if (demo) { state.team = id; boot(); } else setTeam(id); };
+$("#team").addEventListener("change", (e) => pickTeam(e.target.value));
 $("#foot").addEventListener("click", (e) => {
   if (e.target.id !== "demoToggle") return;
   demo = !demo;
   boot().then(() => scrollTo(0, 0));
 });
-window.addEventListener("hashchange", () => { const id = IX && IX.byAbbr.get(decodeURIComponent(location.hash.slice(1))); if (id && id !== state.team) setTeam(id); });
+window.addEventListener("hashchange", () => { const id = IX && IX.byAbbr.get(decodeURIComponent(location.hash.slice(1))); if (id && id !== state.team) pickTeam(id); });
 $("#hero").addEventListener("click", (e) => {
   if (e.target.id === "prev") { state.week--; render(); }
   if (e.target.id === "next") { state.week++; render(); }
@@ -542,8 +607,18 @@ document.addEventListener("toggle", (e) => {
   const el = e.target;
   const key = el.dataset && (el.dataset.id || (el.dataset.g && "g:" + el.dataset.g));
   if (!key) return;
-  el.open ? state.open.add(key) : state.open.delete(key);
+  if (el.dataset.g) el.open ? state.open.delete("closed:" + el.dataset.g) : state.open.add("closed:" + el.dataset.g);
+  else el.open ? state.open.add(key) : state.open.delete(key);
 }, true);
+document.addEventListener("click", (e) => {
+  const b = e.target.closest && e.target.closest(".whybtn");
+  if (!b) return;
+  const id = b.dataset.why, open = b.getAttribute("aria-expanded") !== "true";
+  open ? state.open.add(id) : state.open.delete(id);
+  b.setAttribute("aria-expanded", open);
+  const body = b.closest(".card").querySelector(".whybody");
+  if (body) body.hidden = !open;
+});
 $("#gear").addEventListener("click", () => $("#tune").showModal());
 $("#rivals").addEventListener("click", (e) => {
   const id = e.target.dataset.rm; if (!id) return;
