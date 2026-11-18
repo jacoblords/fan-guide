@@ -2,13 +2,13 @@
  * to root for, broken into signals that can disagree.
  *
  * Every signal returns a signed, continuous star value on a 0-5 scale: positive means root for
- * the home team. The page re-signs them relative to the overall pick, so a signal pulling the
- * other way shows as negative stars.
+ * the home team. Each also carries a plain one-line reason (`short`, for the collapsed card) and
+ * the numbers behind it (`text`, for the expanded card).
  *
  * Signals:
  *   conf    exact: how the result moves your conference title-game odds (Title Paths)
  *   rank    estimate: teams near you in the rankings losing, or passing you by winning
- *   resume  estimate: teams you beat (or lost to) winning makes your record look better
+ *   resume  estimate: teams you played winning makes your record look better
  *   rep     soft: your conference's non-conference results
  *   rivals  heart: your rivals losing, or games that hurt their title odds
  * plus `spectacle` (not a rooting signal): ranked teams, a close line, prime time.
@@ -17,11 +17,11 @@
   "use strict";
 
   const SIGNALS = [
-    { key: "conf", label: "Conference race", kind: "head" },
-    { key: "rank", label: "Rankings", kind: "head" },
-    { key: "resume", label: "Résumé", kind: "head" },
-    { key: "rep", label: "Conference reputation", kind: "head", soft: true },
-    { key: "rivals", label: "Rivals", kind: "heart" },
+    { key: "conf", label: "Title race", group: "Conference title race", kind: "head" },
+    { key: "rank", label: "Rankings", group: "Playoff ladder", kind: "head" },
+    { key: "resume", label: "Teams you played", group: "Teams you've played", kind: "head" },
+    { key: "rep", label: "League pride", group: "League pride", kind: "head", soft: true },
+    { key: "rivals", label: "Rivals", group: "Rival watch", kind: "heart" },
   ];
   const DEFAULT_WEIGHTS = { conf: 1, rank: 0.8, resume: 0.6, rep: 0.3, rivals: 0.8 };
 
@@ -29,13 +29,15 @@
   const STAR_STEPS = {
     conf: [0.01, 0.03, 0.07, 0.15, 0.3], // change in title-game odds
     rank: [0.2, 0.5, 1, 1.6, 2.4], // expected ranking spots gained
-    resume: [0.5, 1, 1.8, 2.6, 3.5], // résumé leverage units
+    resume: [0.5, 1, 1.8, 2.6, 3.5], // leverage units
     rep: [0.6, 1.2, 1.8, 2.4, 3], // soft: tops out around 2 stars in practice
     rivals: [0.8, 1.6, 2.5, 3.5, 4.5], // pain units
   };
 
-  // Overall "how much to care" stars from a game's priority.
-  const OVERALL_STEPS = [0.75, 1.5, 2.25, 3, 4];
+  // Overall "how much to care" stars from a game's priority, and how many games a week may
+  // have five (the rest are capped at four and a half).
+  const OVERALL_STEPS = [1, 2, 3, 4.5, 6.5];
+  const MAX_FIVES = 3;
 
   // Ranking lines that matter: the 12-team bracket's byes (top 4) and bubble (about 12); from
   // 2027 the 24-team bracket's byes (8), home games (16) and the field (24).
@@ -86,6 +88,7 @@
     const n = name(ix, tid);
     return t && t.rank ? `No. ${t.rank} ${n}` : n;
   }
+  const poss = (n) => (n.endsWith("s") ? n + "'" : n + "'s");
 
   /** ESPN's pre-game odds for the home team, or an FPI-based stand-in. */
   function pHome(ix, g) {
@@ -108,8 +111,19 @@
     const [ifH, ifA] = swing;
     const raw = ifH - ifA;
     if (Math.abs(raw) < 0.005) return null;
+    const winner = name(ix, raw > 0 ? g.home : g.away);
+    const d = Math.abs(raw);
+    const size = d >= 0.15 ? "huge" : d >= 0.07 ? "big" : d >= 0.02 ? "good" : "a little good";
+    let short = `${winner} win is ${size} for your ${race.name} title shot`;
+    if (g.home === fan.team || g.away === fan.team) {
+      const [ifWin, ifLose] = g.home === fan.team ? [ifH, ifA] : [ifA, ifH];
+      short = ifWin >= 0.995 && ifLose < 0.995 ? `Win and you're in the ${race.name} title game`
+        : ifLose <= 0.005 && ifWin > 0.005 ? `Lose and you're out of the ${race.name} title race`
+        : `Title-game odds: ${pct(ifWin)} with a win, ${pct(ifLose)} with a loss`;
+    }
     return {
       raw,
+      short,
       text: `${race.name} title-game odds: ${pct(ifH)} if ${name(ix, g.home)} wins, ${pct(ifA)} if ${name(ix, g.away)} wins`,
       link: race.url,
     };
@@ -148,13 +162,19 @@
     if (Math.abs(raw) < 0.03) return null;
     // Explain the biggest term.
     const terms = [
-      [fallBelow(a, 1 - p), `${ranked(ix, a)} losing could drop it below you`],
-      [fallBelow(h, p), `${ranked(ix, h)} losing could drop it below you`],
-      [passUp(h, p, a), `${ranked(ix, h)} winning could lift it past you`],
-      [passUp(a, 1 - p, h), `${ranked(ix, a)} winning could lift it past you`],
+      [fallBelow(a, 1 - p), a, "loss"],
+      [fallBelow(h, p), h, "loss"],
+      [passUp(h, p, a), h, "win"],
+      [passUp(a, 1 - p, h), a, "win"],
     ].sort((x, y) => y[0] - x[0]);
+    const [, tid, kind] = terms[0];
     const you = X.rank ? `No. ${X.rank}` : "unranked";
-    return { raw, text: `${terms[0][1]} (you're ${you}${nearLine && X.rank ? ", near a playoff line" : ""})` };
+    return {
+      raw,
+      short: kind === "loss" ? `${name(ix, tid)} loss could move you up the rankings` : `${name(ix, tid)} win could move it past you`,
+      text: `${ranked(ix, tid)} ${kind === "loss" ? "losing could drop it below you" : "winning could lift it past you"} (you're ${you}${nearLine && X.rank ? ", near a playoff line" : ""})`,
+      ladder: true,
+    };
   }
 
   function resumeLeverage(ix, oid) {
@@ -180,7 +200,7 @@
   function resumeSignal(ix, fan, g) {
     const games = ix.played.get(fan.team) || [];
     let raw = 0;
-    const notes = [];
+    const notes = [], shorts = [];
     for (const [tid, sign] of [[g.home, 1], [g.away, -1]]) {
       if (tid === fan.team) continue;
       const met = games.find((x) => x.home === tid || x.away === tid);
@@ -190,15 +210,13 @@
       raw += sign * L * (beat ? 1 : 0.6);
       const mine = met.home === fan.team ? met.homeScore : met.awayScore;
       const theirs = met.home === fan.team ? met.awayScore : met.homeScore;
-      const score = mine != null ? ` ${beat ? "W" : "L"} ${mine}-${theirs}` : "";
-      notes.push(
-        `You ${beat ? "beat" : "lost to"} ${name(ix, tid)}${score} (week ${met.week}): ` +
-          `${beat ? "its wins make that win look better" : "its wins make that loss look better"}` +
-          (why ? `, and ${why}` : "")
-      );
+      const score = mine != null ? ` ${mine}-${theirs}` : "";
+      const n = name(ix, tid);
+      shorts.push(beat ? `You beat ${n}; ${poss(n)} wins make that look better` : `You lost to ${n}; the better ${n} looks, the better that loss looks`);
+      notes.push(`${beat ? "Beat" : "Lost to"} ${n}${score} in week ${met.week}${why ? `; a win here ${why}` : ""}`);
     }
-    if (!raw && !notes.length) return null;
-    return { raw, text: notes.join(". ") };
+    if (!notes.length) return null;
+    return { raw, short: shorts.join(". "), text: notes.join(". ") };
   }
 
   function repSignal(ix, fan, g) {
@@ -213,59 +231,71 @@
     const theirsP4 = (confs[theirs.conf] || {}).p4 || theirs.id === "87";
     const L = 1 + (theirsP4 ? 0.5 : 0) + (H.rank || A.rank ? 0.5 : 0);
     const cn = (c) => (confs[c] || {}).name || "their league";
+    const other = theirs.id === "87" ? "Notre Dame" : `the ${cn(theirs.conf)}`;
     return {
       raw: mineH ? L : -L,
       soft: true,
-      text: `${cn(X.conf)} vs ${theirs.id === "87" ? "Notre Dame" : cn(theirs.conf)}: a ${ours.short} win is one for the ${cn(X.conf)}`,
+      short: `One for the ${cn(X.conf)} against ${other}`,
+      text: `${ours.short} is a ${cn(X.conf)} team; league records against other leagues shape how the committee sees everyone in it`,
     };
   }
 
-  /** How much a loss hurts rival R, with the reasons. */
+  /** How much a loss hurts rival R, with plain reasons. Driven by real stakes, so a sure
+   * winner with little riding on the game doesn't rate as much pain. */
   function rivalPain(ix, fan, R, g, pRwin) {
     const T = ix.teams.get(R);
-    let pain = 1;
+    let pain = 0.5;
     const why = [];
     const race = T && ix.data.confOdds[T.conf];
     const sw = race && race.games[g.id] && race.games[g.id][R];
+    let title = null;
     if (sw && sw[0] != null) {
       const [ifH, ifA] = sw;
       const [ifWin, ifLose] = g.home === R ? [ifH, ifA] : [ifA, ifH];
       const d = ifWin - ifLose;
       if (d > 0.005) {
-        pain += Math.min(2.5, d * 10);
-        why.push(`${race.name} title-game odds ${pct(ifWin)} → ${pct(ifLose)}`);
+        pain += Math.min(3, d * 12);
+        title = { ifWin, ifLose, d, conf: race.name };
+        if (d >= 0.05) why.push(d >= 0.25 ? `it would wreck their ${race.name} title hopes` : `it would hurt their ${race.name} title hopes`);
       }
     }
     if (T && T.rank) {
-      pain += T.rank <= 12 ? 1 : 0.5;
-      why.push(`No. ${T.rank}, with ranking to lose`);
+      pain += T.rank <= 12 ? 0.7 : 0.3;
+      if (T.rank <= 12) why.push(`it would cost them their No. ${T.rank} spot`);
     }
     const left = ix.remaining.get(R) || 0;
     if (T && T.record[0] === 5) {
       pain += left <= 1 ? 1.5 : 0.7;
-      why.push(left <= 1 ? "a loss ends its bowl hopes" : "stuck at 5 wins");
+      why.push(left <= 1 ? "it would end their bowl hopes" : "they're stuck on 5 wins");
     }
     const opp = g.home === R ? g.away : g.home;
     const theirRivals = (fan.rivalsOf && fan.rivalsOf(R)) || [];
     if (theirRivals.includes(opp)) {
       pain += 1;
-      why.push(`losing to its own rival ${name(ix, opp)}`);
+      why.push(`it'd come against their own rival, ${name(ix, opp)}`);
     }
-    pain += pRwin; // losing as the favorite stings more
-    if (pRwin >= 0.75) why.push(`favored at ${pct(pRwin)}`);
-    return { pain, why };
+    pain += 0.5 * pRwin; // losing as the favorite stings more
+    return { pain, why, title };
   }
 
   function rivalsSignal(ix, fan, g, p) {
     let raw = 0;
-    const notes = [];
+    const notes = [], shorts = [];
+    const inGame = fan.rivals.filter((R) => R !== fan.team && (g.home === R || g.away === R));
+    if (inGame.length === 2) {
+      return { raw: 0, short: `Both your rivals: one of them loses`, text: `${name(ix, g.away)} and ${name(ix, g.home)} are both on your rivals list`, both: true };
+    }
     for (const R of fan.rivals) {
       if (R === fan.team) continue;
       if (g.home === R || g.away === R) {
         const pRwin = g.home === R ? p : 1 - p;
         const { pain, why } = rivalPain(ix, fan, R, g, pRwin);
         raw += g.home === R ? -pain : pain;
-        notes.push(`${ranked(ix, R)} losing (${pct(1 - pRwin)} chance)${why.length ? ": " + why.join("; ") : ""}`);
+        const T = ix.teams.get(R);
+        const rec = T && T.record ? ` (${T.record[0]}-${T.record[1]})` : "";
+        shorts.push(`${name(ix, R)}${rec} loss: ${why[0] || "your rival loses"}`);
+        const tt = rivalPain(ix, fan, R, g, pRwin).title;
+        notes.push([`${name(ix, R)} loses ${pct(1 - pRwin)} of the time`, tt && `${tt.conf} title-game odds ${pct(tt.ifWin)} with a win, ${pct(tt.ifLose)} with a loss`, ...why.slice(1)].filter(Boolean).join(". "));
         continue;
       }
       // A game R isn't in can still dent R's title odds.
@@ -277,20 +307,20 @@
         const d = sw[0] - sw[1];
         if (Math.abs(d) >= 0.01) {
           raw += -d * 10;
-          notes.push(
-            `${name(ix, R)}'s ${race.name} title-game odds: ${pct(sw[0])} if ${name(ix, g.home)} wins, ${pct(sw[1])} if ${name(ix, g.away)} wins`
-          );
+          const helps = name(ix, d > 0 ? g.away : g.home);
+          shorts.push(`${helps} win dents ${poss(name(ix, R))} ${race.name} title hopes`);
+          notes.push(`${poss(name(ix, R))} ${race.name} title-game odds: ${pct(sw[0])} if ${name(ix, g.home)} wins, ${pct(sw[1])} if ${name(ix, g.away)} wins`);
         }
       }
     }
-    return notes.length ? { raw, text: notes.join(". ") } : null;
+    return shorts.length ? { raw, short: shorts.join(". "), text: notes.join(". ") } : null;
   }
 
   function spectacle(ix, g, p) {
     const rk = [g.home, g.away].filter((t) => (ix.teams.get(t) || {}).rank).length;
     const close = 1 - Math.abs(2 * p - 1);
     const h = new Date(g.date).getUTCHours();
-    const prime = g.timeValid !== false && h >= 23 || (h >= 0 && h < 4) ? 0.5 : 0;
+    const prime = g.timeValid !== false && (h >= 23 || h < 4) ? 0.5 : 0;
     return rk + 2 * close + prime;
   }
 
@@ -314,25 +344,37 @@
       if (!r) continue;
       const stars = toStars(r.raw, STAR_STEPS[s.key]);
       const w = W[s.key] ?? 0;
+      if (Math.abs(stars) < 0.25 && !r.both) continue; // too small to mention
       total += w * stars;
       spread += w * Math.abs(stars);
-      signals.push({ key: s.key, label: s.label, kind: s.kind, soft: !!(s.soft || r.soft), stars, weighted: w * stars, text: r.text, link: r.link });
+      signals.push({ key: s.key, label: s.label, group: s.group, kind: s.kind, soft: !!(s.soft || r.soft), stars, weighted: w * stars, short: r.short, text: r.text, link: r.link, both: !!r.both });
     }
-    let pick = mine ? fan.team : total > 0.05 ? g.home : total < -0.05 ? g.away : null;
+    const pick = mine ? fan.team : total > 0.05 ? g.home : total < -0.05 ? g.away : null;
     const sign = pick === g.home ? 1 : pick === g.away ? -1 : 0;
-    for (const s of signals) {
-      s.rel = sign ? s.stars * sign : Math.abs(s.stars); // stars toward the pick
-    }
+    for (const s of signals) s.rel = sign ? s.stars * sign : Math.abs(s.stars); // toward the pick
+    // Strongest reason first; it's the one the collapsed card shows.
+    signals.sort((a, b) => Math.abs(b.weighted) - Math.abs(a.weighted));
     const strong = signals.filter((s) => Math.abs(s.weighted) >= 0.75);
     const conflict = !mine && strong.some((s) => s.stars > 0) && strong.some((s) => s.stars < 0);
+    let split = null;
+    if (conflict) {
+      const forPick = strong.find((s) => s.rel > 0), against = strong.find((s) => s.rel < 0);
+      if (forPick && against) {
+        const other = pick === g.home ? g.away : g.home;
+        split = `Split: ${forPick.label.toLowerCase()} says ${name(ix, pick)}, ${against.label.toLowerCase()} says ${name(ix, other)}. ${forPick.label} matters more here.`;
+      }
+    }
     const u = 0.35 + 0.65 * Math.sqrt(4 * p * (1 - p));
     const spec = spectacle(ix, g, p);
     const priority = mine ? 100 : (Math.abs(total) + 0.5 * (spread - Math.abs(total))) * u + 0.25 * spec;
     const result = g.done && !g.canceled && g.winner && pick ? (g.winner === pick ? "won" : "lost") : null;
+    const lead = signals[0];
     return {
       game: g, p, pick, mine, total, priority,
-      stars: mine ? 5 : Math.round(toStars(priority, OVERALL_STEPS) * 2) / 2,
-      signals, conflict, spectacle: spec,
+      stars: mine ? null : Math.round(toStars(priority, OVERALL_STEPS) * 2) / 2,
+      signals, conflict, split, spectacle: spec,
+      group: mine ? "mine" : lead ? lead.key : null,
+      reason: lead ? lead.short : null,
       heart: signals.some((s) => s.kind === "heart"),
       result,
     };
@@ -343,26 +385,74 @@
     const games = ix.data.games.filter((g) => g.week === week && !g.canceled);
     const rows = games.map((g) => scoreGame(ix, fan, g));
     rows.sort((a, b) => b.priority - a.priority || a.game.date.localeCompare(b.game.date));
-    const decided = rows.filter((r) => r.result && !r.mine && r.priority >= 0.75);
+    // Five stars are kept for the few games that matter most.
+    let fives = 0;
+    for (const r of rows) {
+      if (r.stars === 5 && ++fives > MAX_FIVES) r.stars = 4.5;
+    }
+    const decided = rows.filter((r) => r.result && !r.mine && r.stars >= 2);
     return {
       rows,
       tally: { won: decided.filter((r) => r.result === "won").length, lost: decided.filter((r) => r.result === "lost").length },
     };
   }
 
-  /** Watch-them-suffer: each rival's game this week, likeliest pain first. */
-  function sufferList(ix, fan, week) {
-    const out = [];
-    for (const R of fan.rivals) {
-      for (const g of ix.data.games.filter((x) => x.week === week && !x.canceled && (x.home === R || x.away === R))) {
-        if (g.home === fan.team || g.away === fan.team) continue;
-        const p = pHome(ix, g);
-        const pRwin = g.home === R ? p : 1 - p;
-        const { pain, why } = rivalPain(ix, fan, R, g, pRwin);
-        out.push({ rival: R, game: g, pLose: 1 - pRwin, pain, expected: pain * (1 - pRwin), why });
-      }
+  /** The "this week" summary: where your team stands, plus the games to pull for. */
+  function headline(ix, fan, week, rows) {
+    const X = ix.teams.get(fan.team);
+    const n = name(ix, fan.team);
+    const race = X && ix.data.confOdds[X.conf];
+    const st = race && race.teams[fan.team];
+    const own = rows.find((r) => r.mine);
+    let stake;
+    if (st && st.clinched) stake = `${n} has clinched a spot in the ${race.name} title game.`;
+    else if (st && st.eliminated) stake = `${n} is out of the ${race.name} title race${X.rank ? `, but at No. ${X.rank} there's still ranking to play for` : ""}.`;
+    else if (st && st.p != null) {
+      const p = st.p;
+      const mood = p >= 0.7 ? "in control of" : p >= 0.3 ? "in the thick of" : p >= 0.05 ? "hanging on in" : "on the edge of";
+      stake = `${n} is ${mood} the ${race.name} race: ${pct(p)} to reach the title game.`;
+    } else if (X && X.rank) stake = `${n} is No. ${X.rank}, and this week is about the rankings.`;
+    else stake = `${n} is playing for pride and a bowl this week.`;
+    const picks = rows.filter((r) => !r.mine && r.pick && r.stars >= 3 && !r.conflict).slice(0, 3);
+    let pull = "";
+    if (own) {
+      const opp = own.game.home === fan.team ? own.game.away : own.game.home;
+      pull = `Beat ${name(ix, opp)}`;
     }
-    return out.sort((a, b) => b.expected - a.expected);
+    if (picks.length) {
+      const list = picks.map((r) => name(ix, r.pick));
+      const joined = list.length > 1 ? list.slice(0, -1).join(", ") + " and " + list[list.length - 1] : list[0];
+      pull = pull ? `${pull}, and pull for ${joined}.` : `Pull for ${joined}.`;
+    } else if (pull) pull += ".";
+    const big = rows.find((r) => !r.mine && r.stars >= 3);
+    const talk = big
+      ? `Biggest game you're not in: ${name(ix, big.game.away)} at ${name(ix, big.game.home)}. ${big.reason}.`
+      : null;
+    return { stake, pull, picks, talk };
+  }
+
+  /** Live interest: how much a game in progress deserves attention right now. Rewards games
+   * the fan already cares about, close late games, and underdogs leading. */
+  function liveInterest(ix, r) {
+    const g = r.game;
+    if (g.state !== "in" || g.homeScore == null) return null;
+    const margin = g.homeScore - g.awayScore;
+    const period = g.period || 1;
+    const late = Math.min(1, period / 4);
+    const close = 1 - Math.min(1, Math.abs(margin) / 17);
+    const leader = margin > 0 ? g.home : margin < 0 ? g.away : null;
+    const pLeader = leader === g.home ? r.p : leader === g.away ? 1 - r.p : null;
+    const upset = pLeader != null && pLeader < 0.35;
+    const changes = g.leadChanges || 0;
+    const score = (r.mine ? 10 : r.stars || 0) * (0.4 + 0.6 * close * late) + (upset ? 1.5 * late : 0) + Math.min(1, changes * 0.2);
+    let why = null;
+    const q = period >= 5 ? "OT" : ["1st", "2nd", "3rd", "4th"][period - 1];
+    if (upset && Math.abs(margin) > 0) why = `Upset watch: ${name(ix, leader)} leads in the ${q}`;
+    else if (margin === 0 && period >= 3) why = `Tied in the ${q}`;
+    else if (Math.abs(margin) <= 8 && period >= 4) why = `One-score game in the ${q}`;
+    else if (changes >= 4) why = `${changes} lead changes`;
+    const going = r.pick && leader ? (leader === r.pick ? "yes" : "no") : null;
+    return { score, why, hot: !!why && (r.mine || (r.stars || 0) >= 2 || (upset && late >= 1)), going, upset };
   }
 
   /** Default rivals from rivals.json (by abbreviation), as team ids. */
@@ -371,7 +461,7 @@
     return ((t && rivalsJson[t.abbr]) || []).map((a) => ix.byAbbr.get(a)).filter(Boolean);
   }
 
-  const api = { SIGNALS, DEFAULT_WEIGHTS, STAR_STEPS, lines, toStars, index, pHome, scoreGame, scoreWeek, sufferList, defaultRivals, pct };
+  const api = { SIGNALS, DEFAULT_WEIGHTS, STAR_STEPS, lines, toStars, index, pHome, name, scoreGame, scoreWeek, headline, liveInterest, defaultRivals, pct };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.FanScore = api;
 })(typeof self !== "undefined" ? self : this);

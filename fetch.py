@@ -122,7 +122,8 @@ def fetch_week(season, week, teams):
         winner = None
         if done:
             winner = h["team"]["id"] if h.get("winner") else a["team"]["id"] if a.get("winner") else None
-        sc = lambda x: int(float(x["score"])) if done and x.get("score") not in (None, "") else None
+        state = stype.get("state")  # "pre", "in" or "post"
+        sc = lambda x: int(float(x["score"])) if (done or state == "in") and x.get("score") not in (None, "") else None
         odds = (c.get("odds") or [{}])[0] or {}
         tv = c.get("broadcast") or ", ".join(dict.fromkeys(
             n for b in c.get("broadcasts") or [] for n in b.get("names") or []))
@@ -134,7 +135,9 @@ def fetch_week(season, week, teams):
             "homeScore": sc(h), "awayScore": sc(a),
             "timeValid": c.get("timeValid", True) is not False,
             "tv": tv or None, "spread": odds.get("details") or None,
-            "status": stype.get("shortDetail") if stype.get("state") == "in" else None,
+            "status": stype.get("shortDetail") if state == "in" else None,
+            "state": state, "period": c["status"].get("period") if state == "in" else None,
+            "clock": c["status"].get("displayClock") if state == "in" else None,
             "note": notes or None,
         })
     return out

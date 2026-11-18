@@ -24,8 +24,26 @@ Weights default to `DEFAULT_WEIGHTS` and fans can adjust them on the page; rival
 [`rivals.json`](rivals.json) (by ESPN abbreviation) and fans can edit them. Both are kept in
 the browser.
 
-The page has three card styles to compare: per-signal **stars** (negative when a signal pulls
-against the pick), a **tug-of-war** bar per signal, and **chips** with a single meter.
+## The page
+
+One page, with detail on demand, for both the casual fan and the die-hard:
+
+- **This week:** where your team stands in one sentence, who to pull for, and the biggest game
+  you're not in (`headline()` in `score.js`).
+- **Live now** (game days): games under way, ordered by `liveInterest()`, which multiplies a
+  game's stars by how close and how late it is, plus upsets in progress and lead changes. At most
+  one card pulses, and at most one low-rated game gets in (a late upset with a side to take).
+- **Your game**, then **Must-watch**: up to five games of three stars or more, no more than two
+  from any one signal, in kickoff order.
+- **Also on your radar:** the rest, grouped by their strongest signal (title race, playoff
+  ladder, rival watch, teams you've played, league pride) as collapsed one-line rows.
+- **Final:** finished games and whether they went your way.
+
+A card shows the pick and its single strongest reason; **Why** opens a tug-of-war bar per signal
+(colored by the team it pulls toward), the numbers behind each, and the win odds. "⇄ Split" marks
+games whose strong signals disagree, with a sentence saying which wins. Rivals and weights live
+behind the gear. `?demo=live` fakes finished and in-progress games for this week, to see the
+game-day layout without real scores.
 
 ## Data
 
@@ -49,5 +67,6 @@ python3 -m http.server 8765
 ## Not done yet
 
 - A committee model to replace the ranking and résumé heuristics, backtested against the CFP's weekly rankings.
-- Live scores during games (Title Paths' worker pattern), and postseason/bowl weeks.
+- Real live updates: polling (or Title Paths' live-scores worker), in-game win-probability charts, and lead-change counts. `fetch.py` already records state, period, clock and in-game scores.
+- Postseason and bowl weeks.
 - A real name and domain.

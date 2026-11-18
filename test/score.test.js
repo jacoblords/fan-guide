@@ -44,6 +44,7 @@ test("conference signal roots for the result that helps your title odds", () => 
   const conf = r.signals.find((s) => s.key === "conf");
   assert.ok(conf.stars < 0, "B winning helps X, and B is the away team");
   assert.strictEqual(r.pick, "B");
+  assert.match(conf.short, /B win is .* for your Big 12 title shot/);
   assert.match(conf.text, /30% if A wins, 55% if B wins/);
 });
 
@@ -62,15 +63,41 @@ test("own game is pinned first and picks your team", () => {
   assert.ok(rows[0].mine);
 });
 
-test("rivals signal roots against a rival, and suffer lists its game", () => {
+test("rivals signal roots against a rival", () => {
   const ix = fixture();
-  const f = fan(ix, ["R"]);
-  const r = S.scoreGame(ix, f, ix.data.games[2]);
+  const r = S.scoreGame(ix, fan(ix, ["R"]), ix.data.games[2]);
   assert.strictEqual(r.pick, "O");
   assert.ok(r.heart);
-  const s = S.sufferList(ix, f, 12);
-  assert.strictEqual(s[0].rival, "R");
-  assert.ok(Math.abs(s[0].pLose - 0.2) < 1e-9);
+  assert.match(r.signals.find((s) => s.key === "rivals").short, /R .*loss/);
+});
+
+test("two rivals playing each other: no pick from rivals, just a note", () => {
+  const ix = fixture();
+  const s = S.scoreGame(ix, fan(ix, ["A", "B"]), ix.data.games[1]).signals.find((x) => x.key === "rivals");
+  assert.ok(s.both);
+  assert.strictEqual(s.stars, 0);
+});
+
+test("own game carries no stars", () => {
+  const ix = fixture();
+  assert.strictEqual(S.scoreGame(ix, fan(ix), ix.data.games[3]).stars, null);
+});
+
+test("headline names the stakes and the teams to pull for", () => {
+  const ix = fixture();
+  const { rows } = S.scoreWeek(ix, fan(ix), 12);
+  const h = S.headline(ix, fan(ix), 12, rows);
+  assert.match(h.stake, /X is in the thick of the Big 12 race: 40%/);
+  assert.match(h.pull, /^Beat A/);
+});
+
+test("live interest: an underdog leading late is flagged", () => {
+  const ix = fixture();
+  const g = { ...ix.data.games[1], state: "in", period: 4, homeScore: 10, awayScore: 17, pHome: 0.8 };
+  const r = S.scoreGame(ix, fan(ix), g);
+  const li = S.liveInterest(ix, r);
+  assert.match(li.why, /Upset watch: B leads in the 4th/);
+  assert.strictEqual(li.going, "yes");
 });
 
 test("a rival's title odds count in games it isn't playing", () => {
