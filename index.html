@@ -232,7 +232,7 @@ function tugHTML(r) {
     const fill = toHome ? `left:50%;width:${w}%;background:${esc(ch)}` : `right:50%;width:${w}%;background:${esc(ca)}`;
     const tag = `${esc(nm(toHome ? g.home : g.away))}, ${size(s.stars)}`;
     return `<div class="lab">${esc(s.label)}</div><div class="track" role="img" aria-label="${esc(s.label)}: pulls toward ${tag}"><div class="fill" style="${fill}"></div></div>
-      <div class="det"><b>→ ${tag}.</b> ${esc(s.text)}${s.link ? ` · <a href="${esc(s.link)}" target="_blank" rel="noopener">title paths</a>` : ""}</div>`;
+      <div class="det">${esc(s.text)}${s.link ? ` · <a href="${esc(s.link)}" target="_blank" rel="noopener">title paths</a>` : ""}</div>`;
   }).join("");
   if (!rows) return "";
   return `<div class="tug"><div></div><div class="ends"><span>◀ ${esc(nm(g.away))}</span><span>${esc(nm(g.home))} ▶</span></div>${rows}</div>`;
