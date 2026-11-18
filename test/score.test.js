@@ -162,3 +162,40 @@ test("live odds come from the last point of ESPN's chart when there is one", () 
   const g = { home: "A", away: "B", pHome: 0.9, state: "in", period: 2, clock: "5:00", homeScore: 0, awayScore: 0, wp: { pts: [[0, 900], [1500, 612]], final: false } };
   assert.strictEqual(S.liveP(ix, g), 0.612);
 });
+
+// Rankings move relative to each other: a team below you beating an unranked team only passes
+// you if you lose; a team above you losing only drops below you if you win.
+function ladderFixture() {
+  const ix = fixture();
+  const d = ix.data;
+  d.teams.push({ id: "C", abbr: "C", name: "C", short: "C", conf: "8", record: [8, 2, 5, 2], fpi: 12, rank: 13, pickable: true },
+    { id: "D", abbr: "D", name: "D", short: "D", conf: "8", record: [5, 5, 3, 4], fpi: 0, rank: null, pickable: true },
+    { id: "E", abbr: "E", name: "E", short: "E", conf: "8", record: [9, 1, 6, 1], fpi: 15, rank: 9, pickable: true });
+  // X (No. 11) hosts unranked B this week, 70% to win.
+  Object.assign(d.games[3], { away: "B", pHome: 0.7 });
+  d.games.push({ id: "g5", week: 12, date: "2026-11-21T20:00Z", home: "D", away: "C", conf: true, done: false, pHome: 0.4 },
+    { id: "g6", week: 12, date: "2026-11-21T21:00Z", home: "D", away: "E", conf: true, done: false, pHome: 0.2 });
+  return S.index(d);
+}
+
+test("rankings: a team below you beating an unranked team only matters if you lose", () => {
+  const ix = ladderFixture();
+  const s = S.scoreGame(ix, fan(ix), ix.data.games.find((g) => g.id === "g5")).signals.find((x) => x.key === "rank");
+  assert.ok(s, "still a reason to root for D");
+  assert.match(s.text, /No\. 13 C beating unranked D won't lift it past you \(No\. 11\) unless you lose to B/);
+});
+
+test("rankings: a team above you losing helps, as long as you win", () => {
+  const ix = ladderFixture();
+  const r = S.scoreGame(ix, fan(ix), ix.data.games.find((g) => g.id === "g6"));
+  const s = r.signals.find((x) => x.key === "rank");
+  assert.strictEqual(r.pick, "D");
+  assert.match(s.text, /No\. 9 E losing to unranked D could drop it below you \(No\. 11\), as long as you beat B/);
+});
+
+test("rankings: if you've already won, the 'only if you lose' case has no effect", () => {
+  const ix = ladderFixture();
+  Object.assign(ix.data.games[3], { done: true, winner: "X", homeScore: 30, awayScore: 10 });
+  const s = S.scoreGame(ix, fan(ix), ix.data.games.find((g) => g.id === "g5")).signals.find((x) => x.key === "rank");
+  assert.ok(!s, "C can't pass X this week");
+});

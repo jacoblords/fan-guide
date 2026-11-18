@@ -160,52 +160,100 @@
     };
   }
 
+  // ---- rankings ----------------------------------------------------------------------------
+  // Teams move relative to each other, so whether a game can change your spot depends on who
+  // each side beats and on your own result. A team's movement this week, in ranking spots (up
+  // positive): a win over a ranked team lifts it, more if that team was ranked higher; a win over
+  // an unranked team about holds; a loss drops it, more as a bigger favorite, less to a better
+  // ranked team. Unranked teams sit at 26.
+  const UNRANKED = 26;
+  const RANK_NOISE = 0.7; // how sharp "passes" is, in spots
+
+  function movement(ix, tid, opp, won, pWin) {
+    const r = (ix.teams.get(tid) || {}).rank || UNRANKED;
+    const ro = (ix.teams.get(opp) || {}).rank || null;
+    if (won) return ro ? Math.min(6, 1.5 + Math.max(0, r - ro) * 0.25) : 0.3;
+    if (ro && ro < r) return -1.5; // lost to a better ranked team
+    return -(2 + (ro ? 3 : 5) * pWin); // an upset loss costs more
+  }
+
+  /** Your own game this week as [chance, your movement] outcomes ([[1, 0]] for a bye). */
+  function myOutcomes(ix, fan, week) {
+    const g = ix.data.games.find((x) => x.week === week && !x.canceled && (x.home === fan.team || x.away === fan.team));
+    if (!g) return { game: null, outcomes: [[1, 0]] };
+    const opp = g.home === fan.team ? g.away : g.home;
+    const p = g.home === fan.team ? pHome(ix, g) : 1 - pHome(ix, g);
+    const up = movement(ix, fan.team, opp, true, p), down = movement(ix, fan.team, opp, false, p);
+    if (g.done && g.winner) return { game: g, opp, outcomes: [[1, g.winner === fan.team ? up : down]] };
+    return { game: g, opp, outcomes: [[p, up], [1 - p, down]], up, down, p };
+  }
+
+  /** Chance T ends the week on the other side of you, given each side's movement. Above you:
+   * the chance it falls below (good for you). Below you: the chance it climbs past (bad). */
+  function crosses(rT, rX, dT, dX) {
+    return rT < rX ? sigmoid((dX - dT - (rX - rT)) / RANK_NOISE) : sigmoid((dT - dX - (rT - rX)) / RANK_NOISE);
+  }
+
   function rankSignal(ix, fan, g, p) {
     const X = ix.teams.get(fan.team);
     if (!X) return null;
-    const rX = X.rank || 26;
-    const rOf = (tid) => (ix.teams.get(tid) || {}).rank || null;
-    // T loses: chance it falls below you.
-    const fallBelow = (tid, pWin) => {
-      const rT = rOf(tid);
-      if (tid === fan.team || !rT || rT >= rX) return 0;
-      const drop = 3 + 6 * pWin; // a loss as a big favorite costs more
-      return sigmoid((drop - (rX - rT)) / 1.5);
-    };
-    // T wins: chance it climbs past you.
-    const passUp = (tid, pWin, opp) => {
-      if (tid === fan.team) return 0;
-      const rT = rOf(tid);
-      const oppRanked = !!rOf(opp);
-      if (rT && rT > rX) {
-        const gain = 1 + 4 * (1 - pWin) + (oppRanked ? 2 : 0);
-        return sigmoid((gain - (rT - rX)) / 1.5);
+    const rX = X.rank || UNRANKED;
+    const mine = myOutcomes(ix, fan, g.week);
+    // Your gain in ranking terms if `winner` beats `loser`, for one outcome of your own game.
+    const gainIf = (winner, loser, pW, dX) => {
+      let v = 0;
+      for (const [tid, won] of [[winner, true], [loser, false]]) {
+        const T = ix.teams.get(tid);
+        if (tid === fan.team || !T || !T.rank && !won) continue;
+        const rT = T.rank || UNRANKED + 0.5; // an unranked team has to climb into the poll first
+        if (rT === rX) continue;
+        const dT = movement(ix, tid, won ? loser : winner, won, won ? pW : 1 - pW);
+        const c = crosses(rT, rX, dT, dX);
+        v += rT < rX ? c - crosses(rT, rX, 0, 0) : -(c - crosses(rT, rX, 0, 0));
       }
-      if (!rT && oppRanked && rX >= 18) return 0.35 * Math.min(1, (rX - 17) / 8);
-      return 0;
+      return v;
     };
-    const h = g.home, a = g.away;
-    const ifH = fallBelow(a, 1 - p) - passUp(h, p, a);
-    const ifA = fallBelow(h, p) - passUp(a, 1 - p, h);
+    const expect = (winner, loser, pW) => mine.outcomes.reduce((s, [q, dX]) => s + q * gainIf(winner, loser, pW, dX), 0);
+    const ifH = expect(g.home, g.away, p), ifA = expect(g.away, g.home, 1 - p);
     let raw = ifH - ifA;
-    const nearLine = lines(ix.data.season).some((L) => Math.abs(rX - L) <= 2);
-    raw *= X.rank ? (nearLine ? 1.5 : 1) : 0.5;
-    if (Math.abs(raw) < 0.03) return null;
-    // Explain the biggest term.
-    const terms = [
-      [fallBelow(a, 1 - p), a, "loss"],
-      [fallBelow(h, p), h, "loss"],
-      [passUp(h, p, a), h, "win"],
-      [passUp(a, 1 - p, h), a, "win"],
-    ].sort((x, y) => y[0] - x[0]);
-    const [, tid, kind] = terms[0];
+    const nearLine = X.rank && lines(ix.data.season).some((L) => Math.abs(rX - L) <= 2);
+    raw *= X.rank ? (nearLine ? 1.3 : 1) : 0.5;
+    if (Math.abs(raw) < 0.1) return null; // under half a star: not worth a sentence
+
+    // Explain the team that matters most, and whether it depends on your own result.
+    const want = raw > 0 ? g.home : g.away, other = want === g.home ? g.away : g.home;
+    const rw = (ix.teams.get(want) || {}).rank, ro = (ix.teams.get(other) || {}).rank;
+    // The team you're rooting against: above you, its loss helps; below you, its win threatens.
+    const subject = { tid: other, kind: ro && ro < rX ? "loss" : "win" };
+    const S = subject.tid, sName = name(ix, S), sRank = (ix.teams.get(S) || {}).rank;
+    const oppDesc = (tid) => { const t = ix.teams.get(tid) || {}; return t.rank ? `No. ${t.rank} ${name(ix, tid)}` : t.short || t.school ? `unranked ${name(ix, tid)}` : "its opponent"; };
     const you = X.rank ? `No. ${X.rank}` : "unranked";
-    return {
-      raw,
-      short: kind === "loss" ? `${name(ix, tid)} loss could move you up the rankings` : `${name(ix, tid)} win could move it past you`,
-      text: `${ranked(ix, tid)} ${kind === "loss" ? "losing could drop it below you" : "winning could lift it past you"} (you're ${you}${nearLine && X.rank ? ", near a playoff line" : ""})`,
-      ladder: true,
-    };
+    // How much it hinges on your game: the effect if you win vs if you lose.
+    let hinge = null;
+    if (mine.outcomes.length === 2) {
+      const eff = (dX) => Math.abs(gainIf(g.home, g.away, p, dX) - gainIf(g.away, g.home, 1 - p, dX));
+      const ifWin = eff(mine.up), ifLose = eff(mine.down);
+      if (ifLose > 0.25 && ifWin < 0.35 * ifLose) hinge = "lose";
+      else if (ifWin > 0.25 && ifLose < 0.35 * ifWin) hinge = "win";
+    }
+    const myOpp = mine.opp ? name(ix, mine.opp) : null;
+    let short, text;
+    if (subject.kind === "loss") {
+      short = hinge === "win" ? `${sName} loss could move you up, if you beat ${myOpp}` : `${sName} loss could move you up the rankings`;
+      text = `${sRank ? "No. " + sRank + " " : ""}${sName} losing to ${oppDesc(want)} could drop it below you (${you})${hinge === "win" ? `, as long as you beat ${myOpp}` : ""}`;
+    } else if (hinge === "lose") {
+      short = `${sName} win only threatens your spot if you lose`;
+      text = `${sRank ? "No. " + sRank + " " : ""}${sName} beating ${oppDesc(want)} won't lift it past you (${you}) unless you lose to ${myOpp}`;
+    } else {
+      short = ro || rw ? `${sName} win over ${oppDesc(want)} could lift it past you` : `${sName} win could lift it past you`;
+      text = `${sRank ? "No. " + sRank + " " : ""}${sName} beating ${oppDesc(want)} could lift it past you (${you})${mine.game && !mine.game.done ? `, more so if you lose to ${myOpp}` : ""}`;
+    }
+    // A playoff line only gets a mention when this game could move you across it.
+    for (const L of X.rank ? lines(ix.data.season) : []) {
+      if (subject.kind === "loss" && rX === L + 1) text += `, which would move you into the top ${L}`;
+      if (subject.kind === "win" && rX === L && hinge !== "lose") text += `, which would push you out of the top ${L}`;
+    }
+    return { raw, short, text, ladder: true };
   }
 
   function resumeLeverage(ix, oid) {
