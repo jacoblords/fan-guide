@@ -170,7 +170,8 @@ def fetch_rankings(season):
         r = by.get(kind)
         if r and r.get("ranks"):
             return {"poll": label, "date": r.get("date"),
-                    "ranks": {x["team"]["id"]: x["current"] for x in r["ranks"]}}
+                    "ranks": {x["team"]["id"]: int(x["current"]) for x in r["ranks"]
+                              if str(x.get("current", "")).isdigit()}}
     return {"poll": None, "date": None, "ranks": {}}
 
 

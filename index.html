@@ -152,7 +152,7 @@ function fan() {
 }
 const T = (id) => IX.teams.get(id) || { id, short: "TBD", color: "#888" };
 const tname = (id) => { const t = T(id); return t.short || t.school || t.abbr || "Opponent"; };
-const rankName = (id) => { const t = T(id); return (t.rank ? `<span class="muted">${t.rank}</span> ` : "") + esc(tname(id)); };
+const rankName = (id) => { const t = T(id); return (t.rank ? `<span class="muted">${esc(t.rank)}</span> ` : "") + esc(tname(id)); };
 const logo = (id) => { const t = T(id); return t.logo ? `<img class="logo" alt="" loading="lazy" src="${esc(t.logo)}">` : `<span style="width:30px"></span>`; };
 const rec = (id) => { const r = T(id).record; return r ? `${r[0]}-${r[1]}` : ""; };
 
@@ -247,7 +247,7 @@ function renderSummary(res) {
     return `<div class="it">${logo(s.rival)}<b>${rankName(s.rival)}</b> vs ${rankName(opp)} · ${out} · pain ${starsHTML(FanScore.toStars(s.pain, FanScore.STAR_STEPS.rivals))}
       <span class="small muted">${esc(s.why.join("; "))}</span></div>`;
   }).join("") : `<div class="muted small">None of your rivals play this week.</div>`;
-  $("#summary").innerHTML = `<div class="row" style="gap:10px">${logo(state.team)}<b>${esc(t.name)}</b><span class="muted">${rec(state.team)}${t.rank ? " · No. " + t.rank + " " + esc(DATA.poll.poll || "") : ""}</span></div>
+  $("#summary").innerHTML = `<div class="row" style="gap:10px">${logo(state.team)}<b>${esc(t.name)}</b><span class="muted">${rec(state.team)}${t.rank ? " · No. " + esc(t.rank) + " " + esc(DATA.poll.poll || "") : ""}</span></div>
     ${tally}<div style="margin-top:8px"><b>😈 Watch them suffer</b><div class="suffer">${sufferHTML}</div></div>`;
 }
 
