@@ -1,0 +1,50 @@
+name: update
+on:
+  schedule:
+    - cron: "*/30 * * * 4,5,6,0" # Thu-Sun: game days
+    - cron: "0 */3 * * 1,2,3"
+  workflow_dispatch:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: node --test test/
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - id: pages
+        uses: actions/configure-pages@v5
+      - run: curl -sf -o prev.json "${{ steps.pages.outputs.base_url }}/data.json" || true
+      # Live data when ESPN answers; otherwise keep what's published, or the committed test data
+      # on the first deploy. (ESPN currently refuses fetch.py's User-Agent; see README.)
+      - name: Fetch
+        run: |
+          if python3 fetch.py --out live.json $( [ -s prev.json ] && echo --prev prev.json ); then
+            mv live.json data.json
+          elif [ -s prev.json ]; then
+            echo "::warning::Live fetch failed; keeping the published data"
+            cp prev.json data.json
+          else
+            echo "::warning::Live fetch failed; deploying the committed test data"
+          fi
+      - run: mkdir -p site && cp index.html score.js rivals.json data.json site/
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: site }
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: { name: github-pages, url: "${{ steps.d.outputs.page_url }}" }
+    steps:
+      - id: d
+        uses: actions/deploy-pages@v4
