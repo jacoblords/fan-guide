@@ -72,7 +72,7 @@ for tid, t in teams.items():
     t["record"] = rec.get(tid, [0, 0, 0, 0])
     t["fpi"] = fpi.get(tid)
     t["rank"] = ranks.get(tid)
-    t["pickable"] = bool(fetch.CONFS.get(t["conf"] or "", ("", False))[1]) or tid == fetch.NOTRE_DAME
+    t["pickable"] = fetch.pickable(t)
 
 conf_odds = {}
 for lg, d in pages.items():
