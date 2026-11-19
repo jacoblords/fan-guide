@@ -292,6 +292,15 @@ def live_url():
     return url if re.fullmatch(r"https://[a-z0-9][a-z0-9.-]*[a-z0-9](:\d+)?", url) else None
 
 
+def live_ids(data):
+    """live-ids.json for Title Paths' live-scores worker, which asks ESPN only about games some
+    site lists: every FBS game this week and next that isn't over."""
+    week = data["week"]
+    return {"fbs": sorted({g["id"] for g in data["games"]
+                           if week <= g["week"] <= week + 1 and not g["done"] and not g.get("canceled")
+                           and re.fullmatch(r"\d{1,12}", str(g["id"]))})}
+
+
 def records(games):
     rec = {}
     for g in games:
@@ -312,7 +321,15 @@ def main():
     ap.add_argument("--season", type=int)
     ap.add_argument("--now", help="pretend it is this UTC time (testing)")
     ap.add_argument("--prev", help="the previously published data.json, to reuse finished games' charts")
+    ap.add_argument("--live-ids-from", metavar="DATA", help="only write live-ids.json (to --out) from this data.json")
     args = ap.parse_args()
+    if args.live_ids_from:
+        with open(args.live_ids_from) as f:
+            ids = live_ids(json.load(f))
+        with open(args.out, "w") as f:
+            json.dump(ids, f, separators=(",", ":"))
+        print(f"{len(ids['fbs'])} live ids -> {args.out}")
+        return
     now = parse(args.now) if args.now else dt.datetime.now(dt.timezone.utc)
     season = args.season or (now.year if now.month >= 3 else now.year - 1)
 

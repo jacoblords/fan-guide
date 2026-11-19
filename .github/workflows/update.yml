@@ -41,6 +41,8 @@ jobs:
             echo "::warning::Live fetch failed; deploying the committed test data"
           fi
       - run: mkdir -p site && cp index.html score.js rivals.json data.json site/
+      # The games the live-scores worker may ask ESPN about for this page, from the data deployed.
+      - run: python3 fetch.py --live-ids-from data.json --out site/live-ids.json
       # Pages lets browsers cache files for ten minutes; tie the script to this build so a fresh
       # page never runs with an old score.js.
       - run: sed -i "s|src=\"score.js\"|src=\"score.js?v=${GITHUB_SHA::12}\"|" site/index.html && grep -q "score.js?v=" site/index.html

@@ -17,3 +17,5 @@ jobs:
         run: python3 -m py_compile fetch.py tools/fixture_from_titlepaths.py
       - name: Data file is valid
         run: python3 -c "import json; d = json.load(open('data.json')); assert d['games'] and d['teams']"
+      - name: live-ids.json builds
+        run: python3 fetch.py --live-ids-from data.json --out /tmp/live-ids.json && python3 -c "import json; assert isinstance(json.load(open('/tmp/live-ids.json'))['fbs'], list)"
