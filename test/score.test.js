@@ -287,3 +287,22 @@ test("teams you've played: a heavy favorite against an unranked team is chalk", 
   Object.assign(g, { pHome: 0.45 });
   assert.strictEqual(S.scoreGame(S.index(ix.data), fan(ix), g).routine, false, "a real game");
 });
+
+test("a card's reason always agrees with its pick", () => {
+  const ix = fixture();
+  ix.data.confOdds[4].games.g1.X = [0.6, 0.3]; // title race says A; résumé and rankings say B
+  const r = S.scoreGame(ix, fan(ix, ["R"]), ix.data.games[1]);
+  const lead = r.signals.find((s) => s.short === r.reason);
+  assert.ok(lead && lead.rel > 0, `reason "${r.reason}" should support the pick`);
+});
+
+test("FCS teams never move in the rankings, and don't count for league pride", () => {
+  const ix = fixture();
+  ix.data.teams.push({ id: "F", abbr: "F", name: "F", short: "F", conf: "29", record: [5, 5, 3, 3], fpi: null, rank: null, pickable: false });
+  ix.data.games.push({ id: "g8", week: 12, date: "2026-11-21T18:00Z", home: "R", away: "F", conf: false, done: false, pHome: 0.98 });
+  const ix2 = S.index(ix.data);
+  const r = S.scoreGame(ix2, fan(ix2), ix2.data.games.find((g) => g.id === "g8"));
+  const rank = r.signals.find((s) => s.key === "rank");
+  assert.ok(!rank || !/^F /.test(rank.text), "F can't climb past anyone");
+  assert.ok(!r.signals.find((s) => s.key === "rep"), "no league pride against an FCS team");
+});

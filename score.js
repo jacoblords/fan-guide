@@ -90,6 +90,10 @@
   }
   const poss = (n) => (n.endsWith("s") ? n + "'" : n + "'s");
 
+  /** FBS: in one of the FBS conferences the data lists (independents included). FCS teams carry
+   * their own conference ids in ESPN's data, so "has a conference" isn't enough. */
+  const isFBS = (ix, tid) => { const t = ix.teams.get(tid); return !!(t && t.conf && ix.data.confs[t.conf]); };
+
   /** ESPN's pre-game odds for the home team, or an FPI-based stand-in. */
   function pHome(ix, g) {
     if (g.pHome != null) return g.pHome;
@@ -197,6 +201,7 @@
   function rankSignal(ix, fan, g, p) {
     const X = ix.teams.get(fan.team);
     if (!X) return null;
+    if (!X.rank && !inHunt(ix, fan.team)) return null; // no ranking in play
     const rX = X.rank || UNRANKED;
     const mine = myOutcomes(ix, fan, g.week);
     // Your gain in ranking terms if `winner` beats `loser`, for one outcome of your own game.
@@ -204,7 +209,7 @@
       let v = 0;
       for (const [tid, won] of [[winner, true], [loser, false]]) {
         const T = ix.teams.get(tid);
-        if (tid === fan.team || !T || !T.rank && !won) continue;
+        if (tid === fan.team || !T || !isFBS(ix, tid) || !T.rank && !won) continue; // FCS teams don't get ranked
         const rT = T.rank || UNRANKED + 0.5; // an unranked team has to climb into the poll first
         if (rT === rX) continue;
         const dT = movement(ix, tid, won ? loser : winner, won, won ? pW : 1 - pW);
@@ -274,7 +279,7 @@
 
   function resumeLeverage(ix, oid) {
     const O = ix.teams.get(oid);
-    if (!O || !O.conf || !inHunt(ix, oid)) return null;
+    if (!O || !isFBS(ix, oid) || !inHunt(ix, oid)) return null;
     if (O.rank && O.rank >= 20) return { L: 2, why: "keeps it in the Top 25" };
     if (O.rank) return { L: 1.5, why: "" };
     return { L: 1.7, why: "could get it ranked" };
@@ -312,6 +317,8 @@
     const mineH = H.conf === X.conf && g.home !== fan.team;
     const mineA = A.conf === X.conf && g.away !== fan.team;
     if (mineH === mineA) return null;
+    const theirTeam = mineH ? A : H;
+    if (!theirTeam.conf || !ix.data.confs[theirTeam.conf] || (theirTeam.conf === "18" && theirTeam.id !== "87")) return null; // FCS or independents
     const ours = mineH ? H : A, theirs = mineH ? A : H;
     const confs = ix.data.confs;
     const theirsP4 = (confs[theirs.conf] || {}).p4 || theirs.id === "87";
@@ -468,8 +475,10 @@
     const priority = mine ? 100 : stakes * liveFactor + 0.25 * spec;
     const prePriority = mine ? 100 : stakes * u(p) + 0.25 * spec;
     const result = g.done && !g.canceled && g.winner && pick ? (g.winner === pick ? "won" : "lost") : null;
-    const group = mine ? "mine" : signals[0] ? signals[0].key : null;
-    const lead = signals[0];
+    // The card's reason (and its radar group) is the strongest signal that agrees with the pick,
+    // so the line under "Root for X" never argues against X; a disagreeing signal shows as Split.
+    const lead = (pick && signals.find((s) => s.rel > 0)) || signals[0];
+    const group = mine ? "mine" : lead ? lead.key : null;
     return {
       game: g, p, pNow, pick, mine, total, priority,
       stars: mine ? null : Math.round(toStars(priority, OVERALL_STEPS) * 2) / 2,
