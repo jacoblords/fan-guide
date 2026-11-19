@@ -29,6 +29,13 @@
     --star: #f2c14e; --star-off: #343b47; --live: #ff8173; color-scheme: dark;
   }
   * { box-sizing: border-box; }
+  img.logo-dark { display: none; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) img.logo-light { display: none; }
+    :root:not([data-theme="light"]) img.logo-dark { display: inline; }
+  }
+  :root[data-theme="dark"] img.logo-light { display: none; }
+  :root[data-theme="dark"] img.logo-dark { display: inline; }
   body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 var(--body); }
   a { color: var(--accent); }
   button, select { font: inherit; color: inherit; }
@@ -189,6 +196,7 @@
   .rowg .l1 { display: flex; gap: 8px; align-items: center; font-size: 14px; }
   .rowg .l1 .t { color: var(--faint); font-size: 12px; min-width: 82px; flex: none; white-space: nowrap; }
   .rowg .l1 .s { margin-left: auto; }
+  .rowg .rk { color: var(--muted); font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; }
   .rowg .l2 { color: var(--muted); font-size: 13px; padding-left: 90px; }
   .final .l1 .res { font-weight: 650; }
   .final .won { color: var(--good); } .final .lost { color: var(--bad); }
@@ -279,7 +287,13 @@ const weights = () => ({ ...FanScore.DEFAULT_WEIGHTS, ...store.get("weights", {}
 const fan = () => ({ team: state.team, rivals: rivalsFor(state.team), weights: weights(), rivalsOf: (r) => FanScore.defaultRivals(IX, RIVALS, r) });
 const T = (id) => IX.teams.get(id) || { id, color: "#888" };
 const nm = (id) => FanScore.name(IX, id);
-const logo = (id, cls = "") => { const t = T(id); return t.logo ? `<img class="logo ${cls}" alt="" loading="lazy" src="${esc(t.logo)}">` : `<span class="logo ${cls}" style="display:inline-block"></span>`; };
+// ESPN's dark-background logo in dark mode (some teams' regular logos vanish on a dark page).
+const logo = (id, cls = "") => {
+  const t = T(id);
+  if (!t.logo) return `<span class="logo ${cls}" style="display:inline-block"></span>`;
+  if (!t.logoDark || t.logoDark === t.logo) return `<img class="logo ${cls}" alt="" loading="lazy" src="${esc(t.logo)}">`;
+  return `<img class="logo logo-light ${cls}" alt="" loading="lazy" src="${esc(t.logo)}"><img class="logo logo-dark ${cls}" alt="" loading="lazy" src="${esc(t.logoDark)}">`;
+};
 const rec = (id) => { const r = T(id).record; return r ? `${r[0]}-${r[1]}` : ""; };
 
 function starsHTML(v) {
@@ -419,12 +433,14 @@ function cardHTML(r, opts = {}) {
   </article>`;
 }
 
+const rkName = (id) => { const t = T(id); return (t.rank ? `<span class="rk">${esc(t.rank)}</span> ` : "") + esc(nm(id)); };
+
 function compactHTML(r) {
   const g = r.game;
   const other = r.pick === g.home ? g.away : g.home;
   const named = r.pick && (T(r.pick).short || T(r.pick).name);
-  const line = !r.pick ? `${esc(nm(g.away))} at ${esc(nm(g.home))}`
-    : named ? `Root for <b>${esc(nm(r.pick))}</b> over ${esc(nm(other))}` : `Root against <b>${esc(nm(other))}</b>`;
+  const line = !r.pick ? `${rkName(g.away)} at ${rkName(g.home)}`
+    : named ? `Root for <b>${rkName(r.pick)}</b> over ${rkName(other)}` : `Root against <b>${rkName(other)}</b>`;
   const when = g.state === "in" ? `<b style="color:var(--live)">${esc(T(g.away).abbr || "")} ${esc(g.awayScore)}-${esc(g.homeScore)} ${esc(T(g.home).abbr || "")}</b>` : esc(kickoff(g));
   return `<div class="rowg"><div class="l1"><span class="t">${when}</span>${r.pick ? logo(r.pick, "sm") : ""}<span>${line}</span>${r.conflict ? '<span class="pill split" title="' + esc(r.split || "") + '">⇄</span>' : ""}<span class="s">${starsHTML(r.stars)}</span></div>
     <div class="l2">${esc(r.reason || "")}</div></div>`;
@@ -436,7 +452,7 @@ function finalHTML(r) {
   const ws = w === g.home ? g.homeScore : g.awayScore, ls = w === g.home ? g.awayScore : g.homeScore;
   const res = r.mine ? (w === state.team ? "won" : "lost") : r.result;
   const mark = res === "won" ? "✓" : res === "lost" ? "✗" : "·";
-  return `<div class="rowg final"><div class="l1"><span class="res ${res || ""}">${mark}</span>${logo(w, "sm")}<span><b>${esc(nm(w))}</b> beat ${esc(nm(l))} ${esc(ws)}-${esc(ls)}</span><span class="s">${starsHTML(r.stars)}</span></div>
+  return `<div class="rowg final"><div class="l1"><span class="res ${res || ""}">${mark}</span>${logo(w, "sm")}<span><b>${rkName(w)}</b> beat ${rkName(l)} ${esc(ws)}-${esc(ls)}</span><span class="s">${starsHTML(r.stars)}</span></div>
     <div class="l2">${res === "won" ? "Went your way" : res === "lost" ? "Didn't go your way" : ""}${r.reason ? (res ? ". " : "") + esc(r.reason) : ""}</div></div>`;
 }
 
