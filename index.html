@@ -162,11 +162,11 @@
   .tug .ends { grid-column: 2; display: flex; justify-content: space-between; font-size: 11.5px; color: var(--faint); }
   .tug .lab { font-weight: 600; }
   .rival-lab { display: inline-flex; align-items: center; gap: 6px; color: var(--bad); }
-  /* Rival: the team's logo with a red slash, ringed in the card color so it reads on any logo. */
+  /* Rival: the team's logo with a thin red slash, light enough not to bury thin logos. */
   .nope { position: relative; display: inline-flex; flex: none; line-height: 0; vertical-align: -4px; }
   .nope img.logo { width: 20px; height: 20px; }
-  .nope::after { content: ""; position: absolute; left: -16%; right: -16%; top: 50%; height: 2.5px; margin-top: -1.25px;
-    background: var(--bad); border-radius: 2px; transform: rotate(-40deg); box-shadow: 0 0 0 1.5px var(--card); }
+  .nope::after { content: ""; position: absolute; left: -10%; right: -10%; top: 50%; height: 1.5px; margin-top: -0.75px;
+    background: var(--bad); opacity: 0.85; border-radius: 1px; transform: rotate(-40deg); }
   .root .nope { margin-right: 4px; }
   .tug .track { position: relative; height: 10px; border-radius: 5px; background: var(--chip); }
   .tug .track::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1.5px; background: var(--faint); }
