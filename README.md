@@ -27,8 +27,9 @@ the browser.
 ## The page
 
 One page, with detail on demand, for both the casual fan and the die-hard. It's laid out like
-Title Paths' gameday: This week beside your game, card grids for live and must-watch games, the
-radar groups as cards side by side, and finals below; one column on phones.
+Title Paths' gameday on a fixed column grid (cards one column wide, radar groups two, up to four
+columns): This week across the top, live games, your game beside the must-watch games, the radar
+groups, and finals; one column on phones.
 
 - **This week:** where your team stands in one sentence, who to pull for, and the biggest game
   you're not in (`headline()` in `score.js`).

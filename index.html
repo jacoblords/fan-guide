@@ -60,32 +60,37 @@
   .opt-none { padding: 10px 8px; color: var(--muted); font-size: 13.5px; }
   .picker .nm { font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .icon-btn { margin-left: auto; border: 1px solid var(--line); background: var(--card); border-radius: 999px; width: 34px; height: 34px; cursor: pointer; flex: none; }
-  main { max-width: 1240px; margin: 0 auto; padding: 16px 16px 64px; }
-  .bar { max-width: 1240px; }
+  /* A fixed column grid: cards are always one column wide, radar groups two, and the This week
+     card spans them all, so edges line up and nothing stretches with the window. Up to four
+     columns; fewer on a narrower window, centered. */
+  :root { --col: 296px; --gap: 16px; --page: calc(4 * var(--col) + 3 * var(--gap)); }
+  main { max-width: calc(var(--page) + 32px); margin: 0 auto; padding: 16px 16px 64px; }
+  .bar { max-width: calc(var(--page) + 32px); }
 
-  /* Layout, like Title Paths' gameday: this week beside your game, then card grids for live
-     and must-watch games, the radar groups as cards side by side, and finals in two columns. */
-  .layout { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); column-gap: 16px;
-    grid-template-areas: "hero mine" "live live" "must must" "groups groups" "final final"; }
+  /* Layout, like Title Paths' gameday: this week across the top, then card grids for live
+     games and for your game beside the must-watch games, the radar groups as cards side by side,
+     and finals below. */
+  .layout { display: grid; grid-template-columns: repeat(auto-fill, var(--col)); column-gap: var(--gap); justify-content: center; }
   .side, .body { display: contents; }
-  #hero { grid-area: hero; } #mine { grid-area: mine; } #live { grid-area: live; }
-  #must { grid-area: must; } #groups { grid-area: groups; } #final { grid-area: final; }
-  #mine h2 { display: none; }
-  #mine .card { height: 100%; margin: 0; }
-  .layout:has(#mine:empty) #hero { grid-column: 1 / -1; } /* your game is live, up in Live now */
-  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+  #hero, #live, #must, #groups, #final, #foot { grid-column: 1 / -1; }
+  #hero { order: 1; } #live { order: 2; } #must { order: 3; } #groups { order: 4; } #final { order: 5; } #foot { order: 6; }
+  /* Your game and the must-watch games share a row, each heading over its own cards. */
+  .cell { display: flex; flex-direction: column; min-width: 0; }
+  .cell > .card { flex: 1; }
+  .cell-h.blank { visibility: hidden; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, var(--col)); gap: var(--gap); }
   .cards .card { margin: 0; }
-  .groupgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; align-items: start; }
+  .groupgrid { display: grid; grid-template-columns: repeat(auto-fill, calc(2 * var(--col) + var(--gap))); gap: var(--gap); align-items: start; }
   .groupgrid details.group { margin: 0; }
-  .finals { padding: 0; overflow: hidden; display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); }
+  .finals { padding: 0; overflow: hidden; display: grid; grid-template-columns: repeat(auto-fill, calc(2 * var(--col) + var(--gap))); }
   .finals .rowg { border-top: 0; border-bottom: 1px solid var(--line); margin-bottom: -1px; }
 
   /* Phones: one column, in reading order. */
-  @media (max-width: 760px) {
-    .layout { display: flex; flex-direction: column; }
-    #hero { order: 1; } #live { order: 2; } #mine { order: 3; } #must { order: 4; } #groups { order: 5; } #final { order: 6; }
-    #mine h2 { display: flex; }
-    .groupgrid { grid-template-columns: minmax(0, 1fr); }
+  /* Phones (under two columns): one fluid column. */
+  @media (max-width: 660px) {
+    .layout { grid-template-columns: minmax(0, 1fr); }
+    .cards, .groupgrid, .finals { grid-template-columns: minmax(0, 1fr); }
+    .cell-h.blank { display: none; }
   }
   img.logo { width: 28px; height: 28px; object-fit: contain; flex: none; }
   img.logo.sm { width: 20px; height: 20px; }
@@ -250,7 +255,6 @@
   <div class="layout">
     <div class="side">
       <section class="hero" id="hero"></section>
-      <div id="mine"></div>
       <div id="final"></div>
     </div>
     <div class="body">
@@ -258,8 +262,8 @@
       <div id="must"></div>
       <div id="groups"></div>
     </div>
+    <footer id="foot"></footer>
   </div>
-  <footer id="foot"></footer>
 </main>
 <dialog id="tune">
   <form method="dialog" style="display:flex;justify-content:space-between;align-items:center">
@@ -509,7 +513,6 @@ function render() {
     ? `<h2><span class="dot"></span> Live now</h2><div class="cards">` + liveShown.map((x) => cardHTML(x.r, { live: x.li, pulse: x.r.game.id === pulseId })).join("") + `</div>` : "";
 
   const mine = upcoming.find((r) => r.mine);
-  $("#mine").innerHTML = mine ? `<h2>Your game</h2>` + cardHTML(mine) : "";
 
   const others = upcoming.filter((r) => !r.mine && r.stars >= 1);
   // Must-watch: the top games, but no more than two from any one group, so the playoff ladder
@@ -517,7 +520,12 @@ function render() {
   const perGroup = {};
   const must = others.filter((r) => r.stars >= 3 && !r.routine && (perGroup[r.group] = (perGroup[r.group] || 0) + 1) <= 2).slice(0, 5);
   const mustSorted = [...must].sort((a, b) => a.game.date.localeCompare(b.game.date));
-  $("#must").innerHTML = must.length ? `<h2>Must-watch</h2><div class="cards">` + mustSorted.map((r) => cardHTML(r, { biggest: (h.biggest || []).includes(r.game.id) })).join("") + `</div>` : "";
+  // Your game first, under its own heading, then the must-watch games under theirs.
+  const cells = [];
+  if (mine) cells.push(["Your game", cardHTML(mine)]);
+  mustSorted.forEach((r, i) => cells.push([i === 0 ? "Must-watch" : "", cardHTML(r, { biggest: (h.biggest || []).includes(r.game.id) })]));
+  $("#must").innerHTML = cells.length ? `<div class="cards">` + cells.map(([label, card]) =>
+    `<div class="cell"><h2 class="cell-h${label ? "" : " blank"}"${label ? "" : ' aria-hidden="true"'}>${label || "&nbsp;"}</h2>${card}</div>`).join("") + `</div>` : "";
 
   const rest = others.filter((r) => !must.includes(r));
   const groups = {};
