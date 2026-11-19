@@ -231,3 +231,28 @@ test("résumé: only ranked or top-30 opponents count, and only for a team in th
   s = S.scoreGame(S.index(ix.data), fan(ix), ix.data.games[1]).signals.find((x) => x.key === "resume");
   assert.ok(!s, "an unranked team outside the top 30 has no résumé to protect");
 });
+
+test("ladder: a ranked favorite against an unranked team is routine, unless an upset is under way", () => {
+  const ix = ladderFixture();
+  const g6 = ix.data.games.find((g) => g.id === "g6"); // unranked D hosts No. 9 E, which is 80% to win
+  assert.strictEqual(S.scoreGame(ix, fan(ix), g6).routine, true);
+  const live = { ...g6, state: "in", period: 4, clock: "5:00", homeScore: 24, awayScore: 17 };
+  assert.strictEqual(S.scoreGame(ix, fan(ix), live).routine, false, "D leads late: worth watching");
+});
+
+test("ladder: two ranked teams near you meeting is not routine", () => {
+  const ix = ladderFixture();
+  ix.data.games.push({ id: "g7", week: 12, date: "2026-11-21T23:00Z", home: "C", away: "E", conf: true, done: false, pHome: 0.45 });
+  const ix2 = S.index(ix.data);
+  const r = S.scoreGame(ix2, fan(ix2), ix2.data.games.find((g) => g.id === "g7"));
+  assert.strictEqual(r.group, "rank");
+  assert.strictEqual(r.routine, false);
+});
+
+test("headline for a past week gives your result, not 'Beat X'", () => {
+  const ix = fixture();
+  Object.assign(ix.data.games[3], { done: true, winner: "A", homeScore: 17, awayScore: 24 });
+  const { rows } = S.scoreWeek(S.index(ix.data), fan(ix), 12);
+  const h = S.headline(ix, fan(ix), 12, rows);
+  assert.match(h.pull, /^Lost to A 17-24/);
+});

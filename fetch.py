@@ -299,11 +299,11 @@ def main():
     week = current_week(calendar, now)
     last = max(c["week"] for c in calendar)
     teams = {}
-    weeks = list(range(1, min(week + 1, last) + 1))
+    weeks = list(range(1, last + 1))  # the whole regular season, so the page can look ahead
     games = [g for gs in pmap(lambda w: fetch_week(season, w, teams), weeks) for g in gs]
 
-    # ESPN's win odds for the unplayed games of this week and next.
-    upcoming = [g for g in games if g["week"] >= week and not g["done"]]
+    # ESPN's matchup predictor for this week and next; later weeks use FPI on the page.
+    upcoming = [g for g in games if week <= g["week"] <= week + 1 and not g["done"]]
     preds = dict(pmap(fetch_prediction, [g["id"] for g in upcoming]))
     for g in games:
         g["pHome"] = preds.get(g["id"])
