@@ -464,17 +464,34 @@
     const priority = mine ? 100 : stakes * liveFactor + 0.25 * spec;
     const prePriority = mine ? 100 : stakes * u(p) + 0.25 * spec;
     const result = g.done && !g.canceled && g.winner && pick ? (g.winner === pick ? "won" : "lost") : null;
+    const group = mine ? "mine" : signals[0] ? signals[0].key : null;
     const lead = signals[0];
     return {
       game: g, p, pNow, pick, mine, total, priority,
       stars: mine ? null : Math.round(toStars(priority, OVERALL_STEPS) * 2) / 2,
       preStars: mine ? null : Math.round(toStars(prePriority, OVERALL_STEPS) * 2) / 2,
       signals, conflict, split, spectacle: spec,
-      group: mine ? "mine" : lead ? lead.key : null,
+      group,
+      routine: group === "rank" && routineLadder(ix, fan, g, p, pNow),
       reason: lead ? lead.short : null,
       heart: signals.some((s) => s.kind === "heart"),
       result,
     };
+  }
+
+  /** A playoff-ladder game that's business as usual: a ranked team expected to beat an unranked
+   * one. It only matters when two ranked teams near you meet (a win can lift one past you, a loss
+   * drop one below you), or when an upset is under way (the pre-game underdog is at 40% or
+   * better live). Ranks within 6 spots count as near; an unranked fan sits at 26. */
+  const LADDER_NEAR = 6;
+  function routineLadder(ix, fan, g, p, pNow) {
+    const X = ix.teams.get(fan.team);
+    const rX = (X && X.rank) || 26;
+    const rH = (ix.teams.get(g.home) || {}).rank, rA = (ix.teams.get(g.away) || {}).rank;
+    const clash = rH && rA && [rH, rA].some((r) => Math.abs(r - rX) <= LADDER_NEAR);
+    const dogHome = p < 0.5;
+    const upsetLive = g.state === "in" && (dogHome ? pNow : 1 - pNow) >= 0.4;
+    return !clash && !upsetLive;
   }
 
   /** Every game of `week`, scored for `fan` = {team, rivals: [ids], weights?, rivalsOf?}. */
