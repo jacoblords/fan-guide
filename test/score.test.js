@@ -306,3 +306,18 @@ test("FCS teams never move in the rankings, and don't count for league pride", (
   assert.ok(!rank || !/^F /.test(rank.text), "F can't climb past anyone");
   assert.ok(!r.signals.find((s) => s.key === "rep"), "no league pride against an FCS team");
 });
+
+test("a finished game keeps its title-race reason, rebuilt from the odds recorded at the final", () => {
+  const ix = fixture();
+  const g = ix.data.games[1]; // X: 30% if A wins, 55% if B wins; A is a 60% favorite
+  const before = S.scoreGame(ix, fan(ix), g);
+  Object.assign(g, { done: true, winner: "B", homeScore: 10, awayScore: 20 });
+  delete ix.data.confOdds[4].games.g1; // Title Paths drops a finished game from its odds
+  ix.data.confOdds[4].moved = { g1: { X: [0.40, 0.55] } }; // and records before/after instead
+  const after = S.scoreGame(S.index(ix.data), fan(ix), g);
+  const conf = after.signals.find((s) => s.key === "conf");
+  assert.ok(conf, "title-race reason kept");
+  assert.strictEqual(after.pick, before.pick, "same pick");
+  assert.ok(Math.abs(after.stars - before.stars) <= 0.5, `rating about the same (${before.stars} -> ${after.stars})`);
+  assert.match(conf.text, /40% before, 55% after B won/);
+});
