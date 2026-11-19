@@ -45,7 +45,7 @@ groups, and finals; one column on phones.
 A card shows the pick and its single strongest reason; **Why** opens a tug-of-war bar per signal
 (colored by the team it pulls toward), the numbers behind each, and the win odds. "⇄ Split" marks
 games whose strong signals disagree, with a sentence saying which wins. Rivals and weights live
-behind the gear. `?demo=live` (or the footer's "Preview game day" button) makes up a Saturday around
+behind the gear. `?demo=live` (or the footer's "Preview game day" button, shown only when running locally or with `?demo` in the address) makes up a Saturday around
 the picked team: its game live and close, its top games under way or final, and a ranked
 favorite trailing late to show a game climbing into Live now.
 
