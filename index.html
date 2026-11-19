@@ -528,11 +528,11 @@ function render() {
     const list = groups[k].sort((a, b) => a.game.date.localeCompare(b.game.date));
     const sig = FanScore.SIGNALS.find((s) => s.key === k);
     const open = !state.open.has("closed:" + k);
-    // Routine ladder games (a ranked favorite against an unranked team) fold away.
+    // Chalk (a ranked favorite against an unranked team) folds away.
     const shown = list.filter((r) => !r.routine), routine = list.filter((r) => r.routine);
     const count = shown.length ? `${shown.length} game${shown.length > 1 ? "s" : ""}` : "nothing close this week";
     const quiet = routine.length
-      ? `<details class="routine" data-g="routine-${k}"${state.open.has("g:routine-" + k) ? " open" : ""}><summary>${shown.length ? "" : "No ranked matchups near you. "}Show ${routine.length} routine game${routine.length > 1 ? "s" : ""}</summary>${routine.map(compactHTML).join("")}</details>` : "";
+      ? `<details class="routine" data-g="routine-${k}"${state.open.has("g:routine-" + k) ? " open" : ""}><summary title="Favorites expected to win. They only matter if an upset starts.">${shown.length ? "" : "No ranked matchups near you. "}Show ${routine.length} chalk game${routine.length > 1 ? "s" : ""}</summary>${routine.map(compactHTML).join("")}</details>` : "";
     return `<details class="group" data-g="${k}"${open ? " open" : ""}><summary><span class="gname">${esc(sig.group)}</span><span class="tagline">${esc(GROUP_TAGLINES[k])} · ${count}</span></summary>${shown.map(compactHTML).join("")}${quiet}</details>`;
   }).join("") + `</div>` : "";
 
