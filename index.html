@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gameday Guide</title>
+<title>Gameday Stakes</title>
 <meta name="description" content="Pick your team: this week's college football games that matter to you, who to root for, and why.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -59,6 +59,11 @@
   .opt.current .nm2 { font-weight: 700; }
   .opt-none { padding: 10px 8px; color: var(--muted); font-size: 13.5px; }
   .picker .nm { font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .brand { color: inherit; text-decoration: none; }
+  .sib { margin-left: auto; font-family: var(--display); font-weight: 600; font-size: 14px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--muted); text-decoration: none; padding: 5px 12px; border: 1px solid var(--line); border-radius: 999px; white-space: nowrap; }
+  .sib:hover { color: var(--ink); border-color: var(--muted); }
+  .sib + .icon-btn { margin-left: 0; }
   .icon-btn { margin-left: auto; border: 1px solid var(--line); background: var(--card); border-radius: 999px; width: 34px; height: 34px; cursor: pointer; flex: none; }
   /* A fixed column grid: cards are always one column wide, radar groups two, and the This week
      card spans them all, so edges line up and nothing stretches with the window. Up to four
@@ -270,7 +275,7 @@
 <body>
 <header>
   <div class="bar">
-    <span class="brand">Gameday Guide</span>
+    <a class="brand" href="./" title="Gameday Stakes">Gameday Stakes</a>
     <div class="picker-wrap">
       <button class="picker" id="pickBtn" aria-haspopup="listbox" aria-expanded="false" title="Pick your team (/)">
         <span id="pickLogo"></span><span class="nm" id="pickName">Pick a team</span><span class="muted">▾</span>
@@ -281,6 +286,7 @@
         <div id="pickList" role="listbox" aria-label="Teams"></div>
       </div>
     </div>
+    <a class="sib" href="https://titlepaths.com/" title="Title Paths: every path to the conference title games">Title Paths ↗</a>
     <button class="icon-btn" id="gear" aria-label="Rivals and settings" title="Rivals and settings">⚙</button>
   </div>
 </header>
