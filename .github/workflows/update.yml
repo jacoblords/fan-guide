@@ -29,6 +29,8 @@ jobs:
       # Live data when ESPN answers; otherwise keep what's published, or the committed test data
       # on the first deploy. (ESPN currently refuses fetch.py's User-Agent; see README.)
       - name: Fetch
+        env:
+          LIVE_URL: ${{ vars.LIVE_URL }}
         run: |
           if python3 fetch.py --out live.json $( [ -s prev.json ] && echo --prev prev.json ); then
             mv live.json data.json
