@@ -246,9 +246,11 @@ def fetch_rankings(season):
 
 
 def fetch_title_paths():
-    """Title Paths' exact conference odds, by ESPN conference id:
+    """Title Paths' conference odds, by ESPN conference id:
     {"teams": {id: {"p": title-game odds, "first": odds of finishing first, "clinched", "eliminated"}},
-     "games": {game id: {team id: [odds if home wins, odds if away wins]}}}"""
+     "games": {game id: {team id: [odds if home wins, odds if away wins]}},
+     "moved": {game id: {team id: [odds before, odds after]}} for finished games}
+    A league with no odds published (its season is over) still carries its finished games' moves."""
     out = {}
     for league, (path, conf) in TP_LEAGUES.items():
         try:
@@ -257,17 +259,27 @@ def fetch_title_paths():
             print(f"  title paths {league} unavailable: {e}", file=sys.stderr)
             continue
         ex = d.get("exact") or {}
-        if not ex.get("teams"):
-            continue
         r4 = lambda v: round(v, 4) if isinstance(v, (int, float)) else None
         teams, games = {}, {}
-        for t in ex["teams"]:
+        for t in ex.get("teams") or []:
             teams[t["id"]] = {"p": r4(t.get("p")), "first": r4(t.get("first")),
                               "clinched": bool(t.get("clinched")), "eliminated": bool(t.get("eliminated"))}
-            for gid, g in zip(ex["gameIds"], t.get("games") or []):
+            for gid, g in zip(ex.get("gameIds") or [], t.get("games") or []):
                 games.setdefault(gid, {})[t["id"]] = [r4(g.get("pH")), r4(g.get("pA"))]
+        # What each finished game did to every team's title-game odds, as Title Paths recorded
+        # it when the game went final: {game id: {team id: [before, after]}}.
+        moved = {}
+        for g in d.get("games") or []:
+            m = g.get("moved")
+            if isinstance(m, dict):
+                ok = {tid: [r4(v[0]), r4(v[1])] for tid, v in m.items()
+                      if isinstance(v, list) and len(v) == 2 and all(isinstance(x, (int, float)) for x in v)}
+                if ok:
+                    moved[g["id"]] = ok
+        if not teams and not moved:
+            continue
         out[conf] = {"league": league, "name": CONFS[conf][0], "url": f"{TITLE_PATHS}{path}",
-                     "computedAt": ex.get("computedAt"), "teams": teams, "games": games}
+                     "computedAt": ex.get("computedAt"), "teams": teams, "games": games, "moved": moved}
     return out
 
 

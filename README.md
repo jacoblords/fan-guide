@@ -40,7 +40,8 @@ groups, and finals; one column on phones.
   from any one signal, in kickoff order.
 - **Also on your radar:** the rest, grouped by their strongest signal (title race, playoff
   ladder, rival watch, teams you've played, league pride) as collapsed one-line rows.
-- **Final:** finished games and whether they went your way.
+- **Final:** finished games and whether they went your way, with Title Paths' "Title odds" line
+  (each team the result moved by a point or more, scrolling as a ticker when it's long).
 
 A card shows the pick and its single strongest reason; **Why** opens a tug-of-war bar per signal
 (colored by the team it pulls toward), the numbers behind each, and the win odds. "⇄ Split" marks

@@ -83,6 +83,7 @@
   .groupgrid { display: grid; grid-template-columns: repeat(auto-fill, calc(2 * var(--col) + var(--gap))); gap: var(--gap); align-items: start; }
   .groupgrid details.group { margin: 0; }
   .finals { padding: 0; overflow: hidden; display: grid; grid-template-columns: repeat(auto-fill, calc(2 * var(--col) + var(--gap))); }
+  .card.finals { padding: 0; gap: 0; } /* the card's own padding and gap left too little room for two columns */
   .finals .rowg { border-top: 0; border-bottom: 1px solid var(--line); margin-bottom: -1px; }
 
   /* Phones: one column, in reading order. */
@@ -221,6 +222,25 @@
   .rowg .l2 { color: var(--muted); font-size: 13px; padding-left: 90px; }
   .final .l1 .res { font-weight: 650; }
   .final .won { color: var(--good); } .final .lost { color: var(--bad); }
+  /* Title odds moved by a finished game, as on Title Paths' gameday */
+  .moved { display: flex; gap: 8px; align-items: baseline; font-size: 12.5px; font-variant-numeric: tabular-nums; min-width: 0; padding: 4px 0 0 90px; }
+  .moved .lbl { color: var(--muted); white-space: nowrap; font-family: var(--display); font-weight: 600; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; }
+  .mv-track { overflow: hidden; min-width: 0; flex: 1; }
+  .mv-belt { display: inline-flex; white-space: nowrap; }
+  .mv-run { display: inline-flex; gap: 12px; padding-right: 12px; }
+  .mv b { font-family: var(--display); font-weight: 700; letter-spacing: 0.04em; margin-right: 3px; color: var(--ink); }
+  .mv.me b { text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 3px; }
+  .delta { font-weight: 600; } .delta.up { color: var(--good); } .delta.down { color: var(--bad); }
+  .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .mv-track.tick { mask-image: linear-gradient(90deg, transparent, #000 12px, #000 calc(100% - 12px), transparent); }
+  .mv-track.tick .mv-belt { animation: mv-tick var(--dur, 12s) linear infinite; }
+  .mv-track.tick:hover .mv-belt, .mv-track.tick:focus-within .mv-belt { animation-play-state: paused; }
+  @keyframes mv-tick { to { transform: translateX(-50%); } }
+  @media (prefers-reduced-motion: reduce) {
+    .mv-track.tick { overflow-x: auto; scrollbar-width: none; }
+    .mv-track.tick .mv-belt { animation: none; }
+    .mv-track.tick .mv-run[aria-hidden] { display: none; }
+  }
 
   dialog { border: 1px solid var(--line); border-radius: 16px; background: var(--card); color: var(--ink); max-width: 520px; width: calc(100% - 32px); padding: 16px; }
   dialog::backdrop { background: rgba(0,0,0,0.35); }
@@ -237,7 +257,7 @@
     .brand { display: none; }
     .stake { font-size: 17px; }
     .trow .rec { display: none; }
-    .rowg .l2 { padding-left: 0; }
+    .rowg .l2, .moved { padding-left: 0; }
   }
 </style>
 </head>
@@ -475,6 +495,34 @@ function compactHTML(r) {
     <div class="l2">${esc(r.reason || "")}</div></div>`;
 }
 
+// What a finished game did to the title race, as Title Paths recorded it when the game went
+// final: "Title odds BYU ▲11 · HOU ▼20", each team moved by a point or more, biggest first,
+// your team underlined. A line too long for its row scrolls as a ticker (see tickers()).
+function movedHTML(g) {
+  const all = {};
+  for (const c of Object.values(DATA.confOdds || {})) if (c.moved && c.moved[g.id]) Object.assign(all, c.moved[g.id]);
+  const rows = Object.entries(all)
+    .map(([id, v]) => ({ id, d: Math.round((v[1] - v[0]) * 100) }))
+    .filter((x) => x.d !== 0 && IX.teams.has(x.id))
+    .sort((a, b) => Math.abs(b.d) - Math.abs(a.d) || b.d - a.d);
+  if (!rows.length) return "";
+  const run = rows.map(({ id, d }) => `<span class="mv${id === state.team ? " me" : ""}"><b>${esc(T(id).abbr || nm(id))}</b><span class="delta ${d > 0 ? "up" : "down"}"><span aria-hidden="true">${d > 0 ? "▲" : "▼"}${Math.abs(d)}</span><span class="vh"> ${d > 0 ? "up" : "down"} ${Math.abs(d)} point${Math.abs(d) === 1 ? "" : "s"}</span></span></span>`).join("");
+  return `<div class="moved"><span class="lbl">Title odds</span><div class="mv-track"><div class="mv-belt"><span class="mv-run">${run}</span></div></div></div>`;
+}
+
+// A moved line too long for its row scrolls: the run twice over, sliding by one copy.
+function tickers() {
+  for (const t of document.querySelectorAll(".mv-track")) {
+    const belt = t.firstElementChild, run = belt && belt.firstElementChild;
+    if (!run || t.classList.contains("tick") || run.scrollWidth <= t.clientWidth + 1) continue;
+    const copy = run.cloneNode(true);
+    copy.setAttribute("aria-hidden", "true");
+    belt.appendChild(copy);
+    t.classList.add("tick");
+    t.style.setProperty("--dur", `${Math.max(8, run.scrollWidth / 30).toFixed(1)}s`); // about 30px a second
+  }
+}
+
 function finalHTML(r) {
   const g = r.game;
   const w = g.winner, l = w === g.home ? g.away : g.home;
@@ -482,7 +530,7 @@ function finalHTML(r) {
   const res = r.mine ? (w === state.team ? "won" : "lost") : r.result;
   const mark = res === "won" ? "✓" : res === "lost" ? "✗" : "·";
   return `<div class="rowg final"><div class="l1"><span class="res ${res || ""}">${mark}</span>${logo(w, "sm")}<span><b>${rkName(w)}</b> beat ${rkName(l)} ${esc(ws)}-${esc(ls)}</span><span class="s">${starsHTML(r.stars)}</span></div>
-    <div class="l2">${res === "won" ? "Went your way" : res === "lost" ? "Didn't go your way" : ""}${r.reason ? (res ? ". " : "") + esc(r.reason) : ""}</div></div>`;
+    <div class="l2">${res === "won" ? "Went your way" : res === "lost" ? "Didn't go your way" : ""}${r.reason ? (res ? ". " : "") + esc(r.reason) : ""}</div>${movedHTML(g)}</div>`;
 }
 
 // ---- page ----------------------------------------------------------------------------------
@@ -561,6 +609,7 @@ function render() {
   }).join("") + `</div>` : "";
 
   const finals = rows.filter(isFinal).filter((r) => r.mine || (r.stars || 0) >= 1).sort((a, b) => b.game.date.localeCompare(a.game.date));
+  requestAnimationFrame(tickers);
   $("#final").innerHTML = finals.length ? `<h2>Final</h2><div class="card finals">${finals.map(finalHTML).join("")}</div>` : "";
 }
 
@@ -708,6 +757,17 @@ function demoLive(d, rv, team) {
     const h = hash(g.id), w = winner === g.home ? "home" : "away";
     const ws = 21 + (h % 21), ls = ws - 3 - (h % 14);
     Object.assign(g, { done: true, winner: g[w], homeScore: w === "home" ? ws : ls, awayScore: w === "home" ? ls : ws });
+    // What the result does to each title race, from Title Paths' odds: before, and given this result.
+    for (const c of Object.values(d.confOdds || {})) {
+      const sw = c.games && c.games[g.id];
+      if (!sw) continue;
+      const moved = {};
+      for (const [tid, [ifH, ifA]] of Object.entries(sw)) {
+        const before = (c.teams[tid] || {}).p;
+        if (before != null && ifH != null) moved[tid] = [before, w === "home" ? ifH : ifA];
+      }
+      (c.moved ||= {})[g.id] = moved;
+    }
   };
   const used = new Set();
   const take = (r) => { used.add(r.game.id); return r.game; };
@@ -717,6 +777,10 @@ function demoLive(d, rv, team) {
   top.slice(0, 4).forEach((r, i) => live(take(r), 2 + (i % 3), i === 1 ? -6 : 4 + i * 3));
   // Two of the finals went your way, one didn't.
   top.slice(4, 7).forEach((r, i) => final(take(r), (i < 2) === (r.pick === r.game.home) ? r.game.home : r.game.away));
+  // A couple more finals from the title races, so the Title odds line has something to show.
+  const raceGames = new Set(Object.values(d.confOdds || {}).flatMap((c) => Object.keys(c.games || {})));
+  rows.filter((r) => !used.has(r.game.id) && raceGames.has(r.game.id)).slice(0, 3)
+    .forEach((r) => final(take(r), FanScore.pHome(ix, r.game) >= 0.5 ? r.game.home : r.game.away));
   const climber = rows.find((r) => !used.has(r.game.id) && (r.stars || 0) < 2 && r.stars > 0 && (() => {
     const p = FanScore.pHome(ix, r.game), fav = p >= 0.5 ? r.game.home : r.game.away;
     return Math.max(p, 1 - p) >= 0.75 && (ix.teams.get(fav) || {}).rank;
@@ -728,7 +792,7 @@ function demoLive(d, rv, team) {
 let demo = params.get("demo") === "live";
 // The demo's toggle is for testing: shown when running locally, or when the address asks for it
 // (?demo=…), never on the real site otherwise.
-const demoAllowed = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname) || params.has("demo");
+let demoAllowed = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname) || params.has("demo");
 
 async function boot() {
   const [d, rv] = await Promise.all([fetch("data.json", { cache: "no-cache" }).then((r) => r.json()), fetch("rivals.json").then((r) => r.json())]);
@@ -736,6 +800,7 @@ async function boot() {
   const fromHash = pre.byAbbr.get(decodeURIComponent(location.hash.slice(1)));
   const saved = store.get("team", null);
   const team = (state.team && pre.teams.has(state.team) && state.team) || fromHash || (pre.teams.has(saved) ? saved : d.teams.find((t) => t.pickable).id);
+  if (d.preview) demoAllowed = true; // a preview copy of the data (never the deployed one) allows the demo too
   if (demo) demoLive(d, rv, team);
   DATA = d; RIVALS = rv; IX = FanScore.index(d);
   state.week = d.week;
