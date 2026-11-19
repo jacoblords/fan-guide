@@ -566,8 +566,8 @@ function movedHTML(g) {
 function tickers() {
   for (const t of document.querySelectorAll(".mv-track")) {
     const belt = t.firstElementChild, run = belt && belt.firstElementChild;
-    // Scrolls when it doesn't fit, or when it moved three or more teams.
-    if (!run || t.classList.contains("tick") || (run.scrollWidth <= t.clientWidth + 1 && run.children.length < 3)) continue;
+    // Scrolls only when it doesn't fit; a hidden line (in a closed group) is measured when shown.
+    if (!run || t.classList.contains("tick") || !t.clientWidth || run.scrollWidth <= t.clientWidth + 1) continue;
     const copy = run.cloneNode(true);
     copy.setAttribute("aria-hidden", "true");
     belt.appendChild(copy);
@@ -935,6 +935,7 @@ async function tick() {
   } catch (e) { /* a missed update is retried on the next tick */ }
 }
 document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); });
+addEventListener("resize", () => { clearTimeout(feed.resize); feed.resize = setTimeout(tickers, 200); });
 feed.timer = setInterval(tick, LIVE_MS);
 
 const pickTeam = (id) => { if (demo) { state.team = id; boot(); } else setTeam(id); };
@@ -969,6 +970,7 @@ document.addEventListener("toggle", (e) => {
   const el = e.target;
   const key = el.dataset && (el.dataset.id || (el.dataset.g && "g:" + el.dataset.g));
   if (!key) return;
+  if (el.open) requestAnimationFrame(tickers); // lines in a group just opened can be measured now
   if (el.dataset.g && el.dataset.g.startsWith("routine-")) el.open ? state.open.add(key) : state.open.delete(key); // starts closed
   else if (el.dataset.g) el.open ? state.open.delete("closed:" + el.dataset.g) : state.open.add("closed:" + el.dataset.g);
   else el.open ? state.open.add(key) : state.open.delete(key);
