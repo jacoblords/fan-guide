@@ -340,21 +340,28 @@ def main():
     weeks = list(range(1, last + 1))  # the whole regular season, so the page can look ahead
     games = [g for gs in pmap(lambda w: fetch_week(season, w, teams), weeks) for g in gs]
 
-    # ESPN's matchup predictor for this week and next; later weeks use FPI on the page.
-    upcoming = [g for g in games if week <= g["week"] <= week + 1 and not g["done"]]
-    preds = dict(pmap(fetch_prediction, [g["id"] for g in upcoming]))
-    for g in games:
-        g["pHome"] = preds.get(g["id"])
-
-    # Win-probability charts for this week's games under way or over. A finished game's chart is
-    # taken from the previous run when it has one, so each is fetched once after the final.
-    prev_wp = {}
+    prev_games = {}
     if args.prev:
         try:
             with open(args.prev) as f:
-                prev_wp = {g["id"]: g["wp"] for g in json.load(f).get("games", []) if (g.get("wp") or {}).get("final")}
+                prev_games = {g["id"]: g for g in json.load(f).get("games", [])}
         except (OSError, ValueError) as e:
             print(f"  previous data unreadable: {e}", file=sys.stderr)
+
+    # ESPN's matchup predictor for this week and next, before kickoff; later weeks use FPI on the
+    # page. Once a game starts, the pre-game odds and line it had are kept from the previous run,
+    # so the page rates (and places) the game the same during and after it as before it.
+    upcoming = [g for g in games if week <= g["week"] <= week + 1 and not g["done"] and g["state"] != "in"]
+    preds = dict(pmap(fetch_prediction, [g["id"] for g in upcoming]))
+    for g in games:
+        prev = prev_games.get(g["id"]) or {}
+        g["pHome"] = preds.get(g["id"]) if g["id"] in preds else prev.get("pHome")
+        if not g.get("spread") and prev.get("spread"):
+            g["spread"] = prev["spread"]  # ESPN drops the line at kickoff
+
+    # Win-probability charts for this week's games under way or over. A finished game's chart is
+    # taken from the previous run when it has one, so each is fetched once after the final.
+    prev_wp = {gid: g["wp"] for gid, g in prev_games.items() if (g.get("wp") or {}).get("final")}
     started = [g for g in games if g["week"] == week and (g["state"] == "in" or g["done"]) and not g["canceled"]]
     need = [g["id"] for g in started if g["id"] not in prev_wp]
     wps = dict(pmap(fetch_winprob, need))

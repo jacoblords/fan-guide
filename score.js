@@ -141,8 +141,21 @@
     const X = ix.teams.get(fan.team);
     const race = X && ix.data.confOdds[X.conf];
     const mine = race && race.teams[fan.team];
-    const swing = race && race.games[g.id] && race.games[g.id][fan.team];
-    if (!mine || !swing || mine.clinched || mine.eliminated || swing[0] == null) return null;
+    let swing = race && race.games[g.id] && race.games[g.id][fan.team];
+    let done = null;
+    // A finished game is gone from Title Paths' odds; rebuild its swing from what Title Paths
+    // recorded at the final (odds before, and after), so the game keeps its reason and rating:
+    // after - before = (1 - p) x (odds if the winner wins - odds if the loser wins), where p is
+    // the winner's pre-game chance.
+    const mv = race && race.moved && race.moved[g.id] && race.moved[g.id][fan.team];
+    if (!swing && mv && g.done && g.winner) {
+      const p = pHome(ix, g), pw = g.winner === g.home ? p : 1 - p;
+      const d = Math.max(-1, Math.min(1, (mv[1] - mv[0]) / Math.max(1 - pw, 0.02)));
+      const ifW = mv[1], ifL = Math.max(0, Math.min(1, mv[1] - d));
+      swing = g.winner === g.home ? [ifW, ifL] : [ifL, ifW];
+      done = { before: mv[0], after: mv[1] };
+    }
+    if (!swing || swing[0] == null || (!done && (!mine || mine.clinched || mine.eliminated))) return null;
     const [ifH, ifA] = swing;
     const raw = ifH - ifA;
     if (Math.abs(raw) < 0.005) return null;
@@ -155,6 +168,12 @@
       short = ifWin >= 0.995 && ifLose < 0.995 ? `Win and you're in the ${race.name} title game`
         : ifLose <= 0.005 && ifWin > 0.005 ? `Lose and you're out of the ${race.name} title race`
         : `Title-game odds: ${pct(ifWin)} with a win, ${pct(ifLose)} with a loss`;
+    }
+    if (done) {
+      short = g.home === fan.team || g.away === fan.team
+        ? `Title-game odds went ${pct(done.before)} → ${pct(done.after)}`
+        : `${winner} win was ${size} for your ${race.name} title shot`;
+      return { raw, short, text: `${race.name} title-game odds: ${pct(done.before)} before, ${pct(done.after)} after ${name(ix, g.winner)} won`, link: race.url };
     }
     return {
       raw,
@@ -487,6 +506,7 @@
       group,
       rival: rivalOf(signals, pick, mine),
       routine: group === "rank" ? routineLadder(ix, fan, g, p, pNow) : group === "resume" ? routineResume(ix, g, p, pNow, pick) : false,
+      routinePre: group === "rank" ? routineLadder(ix, fan, { ...g, state: "pre" }, p, p) : group === "resume" ? routineResume(ix, { ...g, state: "pre" }, p, p, pick) : false,
       reason: lead ? lead.short : null,
       heart: signals.some((s) => s.kind === "heart"),
       result,

@@ -229,6 +229,7 @@
   .final .won { color: var(--good); } .final .lost { color: var(--bad); }
   /* Title odds moved by a finished game, as on Title Paths' gameday */
   .moved { display: flex; gap: 8px; align-items: baseline; font-size: 12.5px; font-variant-numeric: tabular-nums; min-width: 0; padding: 4px 0 0 90px; }
+  .card > .moved { padding: 0; border-top: 1px dotted var(--line); padding-top: 8px; }
   .moved .lbl { color: var(--muted); white-space: nowrap; font-family: var(--display); font-weight: 600; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; }
   .mv-track { overflow: hidden; min-width: 0; flex: 1; }
   .mv-belt { display: inline-flex; white-space: nowrap; }
@@ -503,7 +504,9 @@ function cardHTML(r, opts = {}) {
   else if (r.rival && r.pick) root = `${nope(r.rival.id)} Root for <b>${esc(nm(r.pick))}</b>`;
   else if (r.pick) root = `Root for <b>${esc(nm(r.pick))}</b>`;
   else root = `<span class="muted">No side to take</span>`;
-  const going = li && li.going ? `<span class="pill ${li.going}">${li.going === "yes" ? "Going your way" : "Not going your way"}</span>` : "";
+  const res = g.done && !g.canceled && g.winner ? (r.mine ? (g.winner === state.team ? "won" : "lost") : r.result) : null;
+  const going = li && li.going ? `<span class="pill ${li.going}">${li.going === "yes" ? "Going your way" : "Not going your way"}</span>`
+    : res ? `<span class="pill ${res === "won" ? "yes" : "no"}">${res === "won" ? "Went your way" : "Didn't go your way"}</span>` : "";
   const split = r.conflict ? `<span class="pill split" title="${esc(r.split || "Signals disagree")}">⇄ Split</span>` : "";
   const reason = r.reason ? `<div class="reason">${esc(r.reason)}${r.reason.endsWith(".") ? "" : "."}</div>` : "";
   const hot = li && li.why ? `<div class="hotline">${esc(li.why)}</div>` : "";
@@ -520,7 +523,8 @@ function cardHTML(r, opts = {}) {
     ${teamsHTML(r)}
     ${hot}
     <div class="verdict" style="--pick:${tint}"><div class="root">${root}</div>${reason}</div>
-    ${live && g.wp ? wpChart(g) : live ? factsHTML(r) : ""}
+    ${(live || res) && g.wp ? wpChart(g) : live ? factsHTML(r) : ""}
+    ${res ? movedHTML(g) : ""}
     <div class="cfoot">${why}${scored || r.mine || (r.stars || 0) >= 3 ? linksHTML(g) : ""}</div>
     ${whyBody}
   </article>`;
@@ -535,9 +539,12 @@ function compactHTML(r) {
   const line = !r.pick ? `${rkName(g.away)} at ${rkName(g.home)}`
     : r.rival && r.rival.playing ? `Root against <b>${rkName(r.rival.id)}</b> <span class="muted">vs ${rkName(r.pick)}</span>`
     : named ? `Root for <b>${rkName(r.pick)}</b> over ${rkName(other)}` : `Root against <b>${rkName(other)}</b>`;
-  const when = g.state === "in" ? `<b style="color:var(--live)">${esc(T(g.away).abbr || "")} ${esc(g.awayScore)}-${esc(g.homeScore)} ${esc(T(g.home).abbr || "")}</b>` : esc(kickoff(g));
-  return `<div class="rowg"><div class="l1"><span class="t">${when}</span>${r.rival ? nope(r.rival.id) : r.pick ? logo(r.pick, "sm") : ""}<span>${line}</span>${r.conflict ? '<span class="pill split" title="' + esc(r.split || "") + '">⇄</span>' : ""}<span class="s">${starsHTML(r.stars)}</span></div>
-    <div class="l2">${esc(r.reason || "")}</div></div>`;
+  const fin = g.done && !g.canceled && g.winner;
+  const score = `${esc(T(g.away).abbr || "")} ${esc(g.awayScore)}-${esc(g.homeScore)} ${esc(T(g.home).abbr || "")}`;
+  const when = g.state === "in" ? `<b style="color:var(--live)">${score}</b>`
+    : fin ? `<b class="${r.result || ""}">${r.result === "won" ? "✓" : r.result === "lost" ? "✗" : ""} ${score}</b>` : esc(kickoff(g));
+  return `<div class="rowg${fin ? " final" : ""}"><div class="l1"><span class="t">${when}</span>${r.rival ? nope(r.rival.id) : r.pick ? logo(r.pick, "sm") : ""}<span>${line}</span>${r.conflict ? '<span class="pill split" title="' + esc(r.split || "") + '">⇄</span>' : ""}<span class="s">${starsHTML(r.stars)}</span></div>
+    <div class="l2">${fin ? (r.result === "won" ? "Went your way. " : r.result === "lost" ? "Didn't go your way. " : "") : ""}${esc(r.reason || "")}</div>${fin ? movedHTML(g) : ""}</div>`;
 }
 
 // What a finished game did to the title race, as Title Paths recorded it when the game went
@@ -559,7 +566,8 @@ function movedHTML(g) {
 function tickers() {
   for (const t of document.querySelectorAll(".mv-track")) {
     const belt = t.firstElementChild, run = belt && belt.firstElementChild;
-    if (!run || t.classList.contains("tick") || run.scrollWidth <= t.clientWidth + 1) continue;
+    // Scrolls when it doesn't fit, or when it moved three or more teams.
+    if (!run || t.classList.contains("tick") || (run.scrollWidth <= t.clientWidth + 1 && run.children.length < 3)) continue;
     const copy = run.cloneNode(true);
     copy.setAttribute("aria-hidden", "true");
     belt.appendChild(copy);
@@ -603,41 +611,32 @@ function render() {
     ${h.talk ? `<p class="talk">💬 ${esc(h.talk)}</p>` : ""}
     ${tally.won + tally.lost ? `<span class="tally">Your week so far: ${tally.won}-${tally.lost}</span>` : ""}`;
 
-  const isLive = (r) => r.game.state === "in";
-  const isFinal = (r) => r.game.done && !r.game.canceled && r.game.winner;
-
-  // Live now. A game's stars are re-scored with the live odds, so a radar game whose upset is
-  // starting to happen climbs past 2 stars and moves up here; at most three such climbers at
-  // once, ordered by live interest, and at most one card pulses.
-  const live = rows.filter(isLive).map((r) => ({ r, li: FanScore.liveInterest(IX, r) })).filter((x) => x.li)
-    .filter((x) => x.r.mine || (x.r.stars || 0) >= 2)
-    .sort((a, b) => b.li.score - a.li.score);
-  const climbers = live.filter((x) => !x.r.mine && (x.r.preStars || 0) < 2).slice(0, 3);
-  const liveShown = live.filter((x) => x.r.mine || (x.r.preStars || 0) >= 2 || climbers.includes(x)).slice(0, 8);
+  // Every game stays where it sat before kickoff: your game first, must-watch games in
+  // Must-watch, the rest in their radar groups. Live and final show in that same spot. Position
+  // comes from the pre-game rating (a finished game's rating is unchanged: its title-race reason
+  // is rebuilt from the odds recorded at the final).
+  const place = (r) => (r.game.state === "in" && r.preStars != null ? r.preStars : r.stars) || 0;
+  const liveOf = new Map(rows.filter((r) => r.game.state === "in").map((r) => [r.game.id, FanScore.liveInterest(IX, r)]));
   feed.rank = rows.map((r) => r.game.id);
-  const hotId = liveShown.find((x) => x.li.hot)?.r.game.id;
-  const pulseId = hotId && !state.pulsed.has(hotId) ? hotId : null; // a card pulses once, not every refresh
+  // At most one card pulses, once: the hottest live game you care about.
+  const hot = [...liveOf.entries()].filter(([, li]) => li && li.hot).sort((a, b) => b[1].score - a[1].score)[0];
+  const pulseId = hot && !state.pulsed.has(hot[0]) ? hot[0] : null;
   if (pulseId) state.pulsed.add(pulseId);
-  const shownIds = new Set(liveShown.map((x) => x.r.game.id));
-  // Live games that didn't make the strip stay where they were, with their score.
-  const upcoming = rows.filter((r) => !isFinal(r) && !shownIds.has(r.game.id));
-  $("#live").innerHTML = liveShown.length
-    ? `<h2><span class="dot"></span> Live now</h2><div class="cards">` + liveShown.map((x) => cardHTML(x.r, { live: x.li, pulse: x.r.game.id === pulseId })).join("") + `</div>` : "";
+  const card = (r, opts = {}) => cardHTML(r, { ...opts, live: liveOf.get(r.game.id), pulse: r.game.id === pulseId });
 
-  const mine = upcoming.find((r) => r.mine);
-
-  const others = upcoming.filter((r) => !r.mine && r.stars >= 1);
+  const mine = rows.find((r) => r.mine);
+  const others = rows.filter((r) => !r.mine && place(r) >= 1);
   // Must-watch: the top games, but no more than two from any one group, so the playoff ladder
   // doesn't crowd out everything else.
   const perGroup = {};
-  const must = others.filter((r) => r.stars >= 3 && !r.routine && (perGroup[r.group] = (perGroup[r.group] || 0) + 1) <= 2).slice(0, 5);
+  const must = others.filter((r) => place(r) >= 3 && !r.routinePre && (perGroup[r.group] = (perGroup[r.group] || 0) + 1) <= 2).slice(0, 5);
   const mustSorted = [...must].sort((a, b) => a.game.date.localeCompare(b.game.date));
   // Your game first, under its own heading, then the must-watch games under theirs.
   const cells = [];
-  if (mine) cells.push(["Your game", cardHTML(mine)]);
-  mustSorted.forEach((r, i) => cells.push([i === 0 ? "Must-watch" : "", cardHTML(r, { biggest: (h.biggest || []).includes(r.game.id) })]));
-  $("#must").innerHTML = cells.length ? `<div class="cards">` + cells.map(([label, card]) =>
-    `<div class="cell"><h2 class="cell-h${label ? "" : " blank"}"${label ? "" : ' aria-hidden="true"'}>${label || "&nbsp;"}</h2>${card}</div>`).join("") + `</div>` : "";
+  if (mine) cells.push(["Your game", card(mine)]);
+  mustSorted.forEach((r, i) => cells.push([i === 0 ? "Must-watch" : "", card(r, { biggest: (h.biggest || []).includes(r.game.id) })]));
+  $("#must").innerHTML = cells.length ? `<div class="cards">` + cells.map(([label, c]) =>
+    `<div class="cell"><h2 class="cell-h${label ? "" : " blank"}"${label ? "" : ' aria-hidden="true"'}>${label || "&nbsp;"}</h2>${c}</div>`).join("") + `</div>` : "";
 
   const rest = others.filter((r) => !must.includes(r));
   const groups = {};
@@ -648,7 +647,7 @@ function render() {
     const list = groups[k].sort((a, b) => a.game.date.localeCompare(b.game.date));
     const sig = FanScore.SIGNALS.find((s) => s.key === k);
     const open = !state.open.has("closed:" + k);
-    // Chalk (a ranked favorite against an unranked team) folds away.
+    // Chalk (a ranked favorite against an unranked team) folds away; an upset under way unfolds it.
     const shown = list.filter((r) => !r.routine), routine = list.filter((r) => r.routine);
     const count = shown.length ? `${shown.length} game${shown.length > 1 ? "s" : ""}` : "nothing close this week";
     const quiet = routine.length
@@ -656,9 +655,9 @@ function render() {
     return `<details class="group" data-g="${k}"${open ? " open" : ""}><summary><span class="gname">${esc(sig.group)}</span><span class="tagline">${esc(GROUP_TAGLINES[k])} · ${count}</span></summary>${shown.map(compactHTML).join("")}${quiet}</details>`;
   }).join("") + `</div>` : "";
 
-  const finals = rows.filter(isFinal).filter((r) => r.mine || (r.stars || 0) >= 1).sort((a, b) => b.game.date.localeCompare(a.game.date));
-  requestAnimationFrame(tickers);
-  $("#final").innerHTML = finals.length ? `<h2>Final</h2><div class="card finals">${finals.map(finalHTML).join("")}</div>` : "";
+  $("#live").innerHTML = "";
+  $("#final").innerHTML = "";
+  tickers();
 }
 
 function renderPicker() {
