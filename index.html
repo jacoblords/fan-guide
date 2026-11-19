@@ -196,6 +196,7 @@
   .rowg .l1 { display: flex; gap: 8px; align-items: center; font-size: 14px; }
   .rowg .l1 .t { color: var(--faint); font-size: 12px; min-width: 82px; flex: none; white-space: nowrap; }
   .rowg .l1 .s { margin-left: auto; }
+  .rowg .rk { color: var(--muted); font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; }
   .rowg .l2 { color: var(--muted); font-size: 13px; padding-left: 90px; }
   .final .l1 .res { font-weight: 650; }
   .final .won { color: var(--good); } .final .lost { color: var(--bad); }
@@ -432,12 +433,14 @@ function cardHTML(r, opts = {}) {
   </article>`;
 }
 
+const rkName = (id) => { const t = T(id); return (t.rank ? `<span class="rk">${esc(t.rank)}</span> ` : "") + esc(nm(id)); };
+
 function compactHTML(r) {
   const g = r.game;
   const other = r.pick === g.home ? g.away : g.home;
   const named = r.pick && (T(r.pick).short || T(r.pick).name);
-  const line = !r.pick ? `${esc(nm(g.away))} at ${esc(nm(g.home))}`
-    : named ? `Root for <b>${esc(nm(r.pick))}</b> over ${esc(nm(other))}` : `Root against <b>${esc(nm(other))}</b>`;
+  const line = !r.pick ? `${rkName(g.away)} at ${rkName(g.home)}`
+    : named ? `Root for <b>${rkName(r.pick)}</b> over ${rkName(other)}` : `Root against <b>${rkName(other)}</b>`;
   const when = g.state === "in" ? `<b style="color:var(--live)">${esc(T(g.away).abbr || "")} ${esc(g.awayScore)}-${esc(g.homeScore)} ${esc(T(g.home).abbr || "")}</b>` : esc(kickoff(g));
   return `<div class="rowg"><div class="l1"><span class="t">${when}</span>${r.pick ? logo(r.pick, "sm") : ""}<span>${line}</span>${r.conflict ? '<span class="pill split" title="' + esc(r.split || "") + '">⇄</span>' : ""}<span class="s">${starsHTML(r.stars)}</span></div>
     <div class="l2">${esc(r.reason || "")}</div></div>`;
@@ -449,7 +452,7 @@ function finalHTML(r) {
   const ws = w === g.home ? g.homeScore : g.awayScore, ls = w === g.home ? g.awayScore : g.homeScore;
   const res = r.mine ? (w === state.team ? "won" : "lost") : r.result;
   const mark = res === "won" ? "✓" : res === "lost" ? "✗" : "·";
-  return `<div class="rowg final"><div class="l1"><span class="res ${res || ""}">${mark}</span>${logo(w, "sm")}<span><b>${esc(nm(w))}</b> beat ${esc(nm(l))} ${esc(ws)}-${esc(ls)}</span><span class="s">${starsHTML(r.stars)}</span></div>
+  return `<div class="rowg final"><div class="l1"><span class="res ${res || ""}">${mark}</span>${logo(w, "sm")}<span><b>${rkName(w)}</b> beat ${rkName(l)} ${esc(ws)}-${esc(ls)}</span><span class="s">${starsHTML(r.stars)}</span></div>
     <div class="l2">${res === "won" ? "Went your way" : res === "lost" ? "Didn't go your way" : ""}${r.reason ? (res ? ". " : "") + esc(r.reason) : ""}</div></div>`;
 }
 
