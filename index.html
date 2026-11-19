@@ -859,7 +859,7 @@ let demo = params.get("demo") === "live";
 let demoAllowed = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname) || params.has("demo");
 
 async function boot(opts = {}) {
-  const [d, rv] = await Promise.all([opts.data || fetch("data.json", { cache: "no-cache" }).then((r) => r.json()), RIVALS || fetch("rivals.json").then((r) => r.json())]);
+  const [d, rv] = await Promise.all([opts.data || fetch("data.json", { cache: "no-cache" }).then((r) => r.json()), RIVALS || fetch("rivals.json", { cache: "no-cache" }).then((r) => r.json())]);
   const pre = FanScore.index(d);
   const fromHash = pre.byAbbr.get(decodeURIComponent(location.hash.slice(1)));
   const saved = store.get("team", null);

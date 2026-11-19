@@ -23,7 +23,8 @@ CORE = "https://sports.core.api.espn.com/v2/sports/football/leagues/college-foot
 TITLE_PATHS = "https://titlepaths.com/"
 UA = "fan-guide (github actions; hourly-ish)"
 
-# ESPN conference ids. "p4" teams (plus Notre Dame) are the ones a fan can pick as their team.
+# ESPN conference ids, with whether each is Power 4 (it weighs how much a league's results
+# against other leagues reflect on yours).
 CONFS = {
     "1": ("ACC", True), "4": ("Big 12", True), "5": ("Big Ten", True), "8": ("SEC", True),
     "9": ("Pac-12", False), "151": ("American", False), "12": ("Conference USA", False),
@@ -31,6 +32,13 @@ CONFS = {
     "18": ("FBS Independents", False),
 }
 NOTRE_DAME = "87"
+# The leagues whose fans can pick their team: the Power 4, plus the Pac-12, which Title Paths
+# covers too. And Notre Dame.
+PICKABLE = {"1", "4", "5", "8", "9"}
+
+
+def pickable(t):
+    return (t.get("conf") or "") in PICKABLE or t["id"] == NOTRE_DAME
 # Title Paths' leagues: page-data path and the ESPN conference id it covers.
 TP_LEAGUES = {"big12": ("", "4"), "sec": ("sec/", "8"), "acc": ("acc/", "1"),
               "big10": ("big10/", "5"), "pac12": ("pac12/", "9")}
@@ -380,7 +388,7 @@ def main():
         t["fpi"] = fpi.get(tid)
         t["sor"] = sor.get(tid)
         t["rank"] = rankings["ranks"].get(tid)
-        t["pickable"] = bool(CONFS.get(t["conf"] or "", ("", False))[1]) or tid == NOTRE_DAME
+        t["pickable"] = pickable(t)
 
     data = {
         "schema": 1, "season": season, "week": week, "weeks": weeks, "lastWeek": last,

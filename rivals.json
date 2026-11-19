@@ -67,5 +67,12 @@
   "USC": ["UCLA", "ND"],
   "WASH": ["ORE", "WSU"],
   "WIS": ["MINN", "IOWA"],
-  "ND": ["USC", "MICH", "NAVY"]
+  "ND": ["USC", "MICH", "NAVY"],
+  "BOIS": ["FRES", "USU"],
+  "CSU": ["COLO", "WYO"],
+  "FRES": ["SDSU", "BOIS"],
+  "ORST": ["ORE", "WSU"],
+  "SDSU": ["FRES"],
+  "USU": ["BYU", "UTAH", "BOIS"],
+  "WSU": ["WASH", "ORST"]
 }
