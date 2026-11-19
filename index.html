@@ -339,7 +339,7 @@ const logo = (id, cls = "") => {
   if (!t.logoDark || t.logoDark === t.logo) return `<img class="logo ${cls}" alt="" loading="lazy" src="${esc(t.logo)}">`;
   return `<img class="logo logo-light ${cls}" alt="" loading="lazy" src="${esc(t.logo)}"><img class="logo logo-dark ${cls}" alt="" loading="lazy" src="${esc(t.logoDark)}">`;
 };
-const rec = (id) => { const r = T(id).record; return r ? `${r[0]}-${r[1]}` : ""; };
+const rec = (id) => { const t = T(id), r = t.record; return r && t.conf && DATA.confs[t.conf] && r[0] + r[1] > 0 ? `${r[0]}-${r[1]}` : ""; };
 
 function starsHTML(v) {
   if (v == null) return "";
@@ -788,7 +788,7 @@ function demoLive(d, rv, team) {
     const base = 6 * period + (h % 7);
     const favScore = base + Math.max(lead, 0), dogScore = base + Math.max(-lead, 0);
     Object.assign(g, { state: "in", period, clock, status: `${clock} - ${["1st", "2nd", "3rd", "4th"][period - 1]}`,
-      homeScore: fav === "home" ? favScore : dogScore, awayScore: fav === "home" ? dogScore : favScore, leadChanges: h % 6 });
+      homeScore: fav === "home" ? favScore : dogScore, awayScore: fav === "home" ? dogScore : favScore });
     // A win-probability chart that wanders toward the estimate for the current score.
     const elapsed = (period - 1) * 900 + 900 - ((1 + (h % 14)) * 60 + (h % 60));
     const pts = [];
