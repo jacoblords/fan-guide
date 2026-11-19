@@ -63,7 +63,9 @@ variable the deploy passes to `fetch.py`, which puts it in `data.json`) for this
 way every 30 seconds: score, clock and ESPN's win-probability chart, one shared ESPN call per game
 per 30 seconds however many people watch. Every minute it re-reads `data.json` for new results and
 odds. It redraws in place, keeping the team, week, open cards and scroll position. The worker must
-list this site's origin in its `ORIGINS` (Title Paths' `trigger/wrangler.toml`). Charts show the
+list this site's origin in its `ORIGINS` and this site's `live-ids.json` in its `EXTRA_LIVE_IDS`
+(Title Paths' `trigger/wrangler.toml`): the deploy publishes that list, every FBS game this week and
+next that isn't over, and the worker only asks ESPN about listed games. Charts show the
 game clock and both teams' odds at any moment you hover (or drag a finger) over them.
 
 ## Data
