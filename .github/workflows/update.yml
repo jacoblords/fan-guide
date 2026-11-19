@@ -40,7 +40,7 @@ jobs:
           else
             echo "::warning::Live fetch failed; deploying the committed test data"
           fi
-      - run: mkdir -p site && cp index.html score.js rivals.json data.json site/
+      - run: mkdir -p site && cp index.html score.js rivals.json data.json favicon.svg site/
       # The games the live-scores worker may ask ESPN about for this page, from the data deployed.
       - run: python3 fetch.py --live-ids-from data.json --out site/live-ids.json
       # Pages lets browsers cache files for ten minutes; tie the script to this build so a fresh
