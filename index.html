@@ -29,6 +29,13 @@
     --star: #f2c14e; --star-off: #343b47; --live: #ff8173; color-scheme: dark;
   }
   * { box-sizing: border-box; }
+  img.logo-dark { display: none; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) img.logo-light { display: none; }
+    :root:not([data-theme="light"]) img.logo-dark { display: inline; }
+  }
+  :root[data-theme="dark"] img.logo-light { display: none; }
+  :root[data-theme="dark"] img.logo-dark { display: inline; }
   body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 var(--body); }
   a { color: var(--accent); }
   button, select { font: inherit; color: inherit; }
@@ -279,7 +286,13 @@ const weights = () => ({ ...FanScore.DEFAULT_WEIGHTS, ...store.get("weights", {}
 const fan = () => ({ team: state.team, rivals: rivalsFor(state.team), weights: weights(), rivalsOf: (r) => FanScore.defaultRivals(IX, RIVALS, r) });
 const T = (id) => IX.teams.get(id) || { id, color: "#888" };
 const nm = (id) => FanScore.name(IX, id);
-const logo = (id, cls = "") => { const t = T(id); return t.logo ? `<img class="logo ${cls}" alt="" loading="lazy" src="${esc(t.logo)}">` : `<span class="logo ${cls}" style="display:inline-block"></span>`; };
+// ESPN's dark-background logo in dark mode (some teams' regular logos vanish on a dark page).
+const logo = (id, cls = "") => {
+  const t = T(id);
+  if (!t.logo) return `<span class="logo ${cls}" style="display:inline-block"></span>`;
+  if (!t.logoDark || t.logoDark === t.logo) return `<img class="logo ${cls}" alt="" loading="lazy" src="${esc(t.logo)}">`;
+  return `<img class="logo logo-light ${cls}" alt="" loading="lazy" src="${esc(t.logo)}"><img class="logo logo-dark ${cls}" alt="" loading="lazy" src="${esc(t.logoDark)}">`;
+};
 const rec = (id) => { const r = T(id).record; return r ? `${r[0]}-${r[1]}` : ""; };
 
 function starsHTML(v) {

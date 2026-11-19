@@ -256,27 +256,32 @@
     return { raw, short, text, ladder: true };
   }
 
+  // A team's standing for résumé purposes: ranked, or in the top 30 of ESPN's Strength of Record
+  // (FPI rank when the data has no SOR). Beating, or losing to, anyone below that line barely
+  // registers with the committee, so their games don't count.
+  const RESUME_LINE = 30;
+  function resumeRank(ix, tid) {
+    const t = ix.teams.get(tid);
+    if (!t) return null;
+    if (ix.hasSor === undefined) ix.hasSor = ix.data.teams.some((x) => x.sor != null);
+    return ix.hasSor ? t.sor ?? null : ix.fpiRank.get(tid) ?? null;
+  }
+  const inHunt = (ix, tid) => {
+    const t = ix.teams.get(tid);
+    const r = resumeRank(ix, tid);
+    return !!(t && (t.rank || (r != null && r <= RESUME_LINE)));
+  };
+
   function resumeLeverage(ix, oid) {
     const O = ix.teams.get(oid);
-    if (!O || !O.conf) return { L: 0.3, why: "" };
-    let L = 1;
-    const why = [];
-    if (O.rank && O.rank >= 15) {
-      L += 1;
-      why.push("keeps it in the Top 25");
-    } else if (O.rank) L += 0.5;
-    else if ((ix.fpiRank.get(oid) || 999) <= 35 || O.record[0] >= 7) {
-      L += 0.7;
-      why.push("could get it ranked");
-    }
-    if (O.record[0] === 5) {
-      L += 0.8;
-      why.push("a 6th win makes it bowl-eligible");
-    }
-    return { L, why: why.join("; ") };
+    if (!O || !O.conf || !inHunt(ix, oid)) return null;
+    if (O.rank && O.rank >= 20) return { L: 2, why: "keeps it in the Top 25" };
+    if (O.rank) return { L: 1.5, why: "" };
+    return { L: 1.7, why: "could get it ranked" };
   }
 
   function resumeSignal(ix, fan, g) {
+    if (!inHunt(ix, fan.team)) return null; // a résumé only matters to a team in the ranking hunt
     const games = ix.played.get(fan.team) || [];
     let raw = 0;
     const notes = [], shorts = [];
@@ -285,7 +290,9 @@
       const met = games.find((x) => x.home === tid || x.away === tid);
       if (!met) continue;
       const beat = met.winner === fan.team;
-      const { L, why } = resumeLeverage(ix, tid);
+      const lev = resumeLeverage(ix, tid);
+      if (!lev) continue;
+      const { L, why } = lev;
       raw += sign * L * (beat ? 1 : 0.6);
       const mine = met.home === fan.team ? met.homeScore : met.awayScore;
       const theirs = met.home === fan.team ? met.awayScore : met.homeScore;

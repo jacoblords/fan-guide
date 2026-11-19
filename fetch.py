@@ -218,14 +218,18 @@ def fetch_winprob(gid):
 
 
 def fetch_fpi(season):
+    """ESPN's power index: FPI, and the rank of its résumé measure ("accomplishment", which
+    ESPN publishes as Strength of Record), by team id."""
     pi = get(f"{CORE}/seasons/{season}/powerindex?limit=300")
-    fpi = {}
+    fpi, sor = {}, {}
     for it in pi["items"]:
         tid = it["team"]["$ref"].split("/teams/")[1].split("?")[0]
-        v = next((p.get("value") for p in it["predictives"] if p["name"] == "fpi"), None)
-        if v is not None:
-            fpi[tid] = round(v, 2)
-    return fpi
+        p = {x["name"]: x.get("value") for x in it["predictives"]}
+        if p.get("fpi") is not None:
+            fpi[tid] = round(p["fpi"], 2)
+        if p.get("accomplishmentrank") is not None:
+            sor[tid] = int(p["accomplishmentrank"])
+    return fpi, sor
 
 
 def fetch_rankings(season):
@@ -321,7 +325,7 @@ def main():
         if wp and len(wp["pts"]) >= 2:
             g["wp"] = wp
 
-    fpi = fetch_fpi(season)
+    fpi, sor = fetch_fpi(season)
     rankings = fetch_rankings(season)
     conf_odds = fetch_title_paths()
 
@@ -329,6 +333,7 @@ def main():
     for tid, t in teams.items():
         t["record"] = rec.get(tid, [0, 0, 0, 0])
         t["fpi"] = fpi.get(tid)
+        t["sor"] = sor.get(tid)
         t["rank"] = rankings["ranks"].get(tid)
         t["pickable"] = bool(CONFS.get(t["conf"] or "", ("", False))[1]) or tid == NOTRE_DAME
 

@@ -13,7 +13,7 @@ for the home team), from [`score.js`](score.js):
 |---|---|---|
 | Conference race | Your title-game odds if A wins vs if B wins | **Exact**, from Title Paths' published `exact` block |
 | Rankings | Teams ranked just above you losing (and falling below you), or teams below you winning and passing you; heavier near the playoff lines (4 and 12 now; 8, 16, 24 from 2027) | Estimate |
-| Résumé | Teams you beat (or lost to) winning; more when it gets them ranked or bowl-eligible | Estimate |
+| Résumé | Teams you beat (or lost to) winning, counting only teams that are ranked or in the top 30 of ESPN's Strength of Record (so fringe Top 25 teams count), and only when your own team is | Estimate |
 | Conference reputation | Your league's non-conference results | Soft |
 | Rivals | Your rivals losing (pain: their title odds, ranking, bowl hopes, losing to their own rival, losing as the favorite), and other games that dent their title odds | Heart |
 

@@ -214,3 +214,20 @@ test("headline names both biggest games when they're within half a star", () => 
   assert.strictEqual(h.biggest.length, 1);
   assert.match(h.talk, /^Biggest game you're not in: /);
 });
+
+test("résumé: only ranked or top-30 opponents count, and only for a team in the hunt", () => {
+  const ix = fixture();
+  const byId = (id) => ix.data.teams.find((t) => t.id === id);
+  byId("X").sor = 12;
+  byId("B").sor = 60; // X beat B, but B is nowhere near the poll
+  ["R", "A", "O"].forEach((id, i) => { byId(id).sor = 20 + i; });
+  let s = S.scoreGame(ix, fan(ix), ix.data.games[1]).signals.find((x) => x.key === "resume");
+  assert.ok(!s, "a win over a team ranked 60th in résumé doesn't count");
+  byId("B").sor = 28;
+  s = S.scoreGame(S.index(ix.data), fan(ix), ix.data.games[1]).signals.find((x) => x.key === "resume");
+  assert.match(s.text, /could get it ranked/);
+  byId("X").sor = 70;
+  byId("X").rank = null;
+  s = S.scoreGame(S.index(ix.data), fan(ix), ix.data.games[1]).signals.find((x) => x.key === "resume");
+  assert.ok(!s, "an unranked team outside the top 30 has no résumé to protect");
+});
