@@ -68,7 +68,8 @@ test("rivals signal roots against a rival", () => {
   const r = S.scoreGame(ix, fan(ix, ["R"]), ix.data.games[2]);
   assert.strictEqual(r.pick, "O");
   assert.ok(r.heart);
-  assert.match(r.signals.find((s) => s.key === "rivals").short, /R .*loss/);
+  assert.match(r.signals.find((s) => s.key === "rivals").short, /^A loss|^It'd|^They're/);
+  assert.deepStrictEqual(r.rival, { id: "R", playing: true }, "rooting against R, who is playing");
 });
 
 test("two rivals playing each other: no pick from rivals, just a note", () => {
@@ -255,4 +256,19 @@ test("headline for a past week gives your result, not 'Beat X'", () => {
   const { rows } = S.scoreWeek(S.index(ix.data), fan(ix), 12);
   const h = S.headline(ix, fan(ix), 12, rows);
   assert.match(h.pull, /^Lost to A 17-24/);
+});
+
+test("a rival affected from the outside is named, but not as playing", () => {
+  const ix = fixture();
+  const r = S.scoreGame(ix, fan(ix, ["R"]), ix.data.games[1]);
+  const s = r.signals.find((x) => x.key === "rivals");
+  assert.deepStrictEqual(s.rivals, ["R"]);
+  assert.strictEqual(s.playing, null);
+});
+
+test("a split involving a rival is said in fan terms", () => {
+  const ix = fixture();
+  ix.data.confOdds[4].games.g1.X = [0.6, 0.3];
+  const r = S.scoreGame(ix, fan(ix, ["R"]), ix.data.games[1]);
+  if (r.split) assert.doesNotMatch(r.split, /rivals says|matters more/);
 });

@@ -366,20 +366,21 @@
 
   function rivalsSignal(ix, fan, g, p) {
     let raw = 0;
-    const notes = [], shorts = [];
+    const notes = [], shorts = [], about = [];
     const inGame = fan.rivals.filter((R) => R !== fan.team && (g.home === R || g.away === R));
     if (inGame.length === 2) {
-      return { raw: 0, short: `Both your rivals: one of them loses`, text: `${name(ix, g.away)} and ${name(ix, g.home)} are both on your rivals list`, both: true };
+      return { raw: 0, short: `Both your rivals: one of them loses`, text: `${name(ix, g.away)} and ${name(ix, g.home)} are both on your rivals list`, both: true, rivals: inGame };
     }
+    // "it would hurt their..." -> "A loss would hurt their..."
+    const lossLine = (w) => !w ? "Your rival loses" : w.startsWith("it would ") ? "A loss " + w.slice(3) : w.startsWith("it'd ") ? "It'd " + w.slice(5) : w.charAt(0).toUpperCase() + w.slice(1);
     for (const R of fan.rivals) {
       if (R === fan.team) continue;
       if (g.home === R || g.away === R) {
         const pRwin = g.home === R ? p : 1 - p;
         const { pain, why } = rivalPain(ix, fan, R, g, pRwin);
         raw += g.home === R ? -pain : pain;
-        const T = ix.teams.get(R);
-        const rec = T && T.record ? ` (${T.record[0]}-${T.record[1]})` : "";
-        shorts.push(`${name(ix, R)}${rec} loss: ${why[0] || "your rival loses"}`);
+        about.push(R);
+        shorts.push(lossLine(why[0]));
         const tt = rivalPain(ix, fan, R, g, pRwin).title;
         notes.push([`${name(ix, R)} loses ${pct(1 - pRwin)} of the time`, tt && `${tt.conf} title-game odds ${pct(tt.ifWin)} with a win, ${pct(tt.ifLose)} with a loss`, ...why.slice(1)].filter(Boolean).join(". "));
         continue;
@@ -393,13 +394,14 @@
         const d = sw[0] - sw[1];
         if (Math.abs(d) >= 0.01) {
           raw += -d * 10;
+          about.push(R);
           const helps = name(ix, d > 0 ? g.away : g.home);
           shorts.push(`${helps} win dents ${poss(name(ix, R))} ${race.name} title hopes`);
           notes.push(`${poss(name(ix, R))} ${race.name} title-game odds: ${pct(sw[0])} if ${name(ix, g.home)} wins, ${pct(sw[1])} if ${name(ix, g.away)} wins`);
         }
       }
     }
-    return shorts.length ? { raw, short: shorts.join(". "), text: notes.join(". ") } : null;
+    return shorts.length ? { raw, short: shorts.join(". "), text: notes.join(". "), rivals: about, playing: inGame[0] || null } : null;
   }
 
   function spectacle(ix, g, p) {
@@ -438,7 +440,7 @@
       if (Math.abs(stars) < 0.25 && !r.both) continue; // too small to mention
       total += w * stars;
       spread += w * Math.abs(stars);
-      signals.push({ key: s.key, label: s.label, group: s.group, kind: s.kind, soft: !!(s.soft || r.soft), stars, weighted: w * stars, short: r.short, text: r.text, link: r.link, both: !!r.both });
+      signals.push({ key: s.key, label: s.label, group: s.group, kind: s.kind, soft: !!(s.soft || r.soft), stars, weighted: w * stars, short: r.short, text: r.text, link: r.link, both: !!r.both, rivals: r.rivals || null, playing: r.playing || null });
     }
     const pick = mine ? fan.team : total > 0.05 ? g.home : total < -0.05 ? g.away : null;
     const sign = pick === g.home ? 1 : pick === g.away ? -1 : 0;
@@ -452,7 +454,9 @@
       const forPick = strong.find((s) => s.rel > 0), against = strong.find((s) => s.rel < 0);
       if (forPick && against) {
         const other = pick === g.home ? g.away : g.home;
-        split = `Split: ${forPick.label.toLowerCase()} says ${name(ix, pick)}, ${against.label.toLowerCase()} says ${name(ix, other)}. ${forPick.label} matters more here.`;
+        const phrase = { conf: "your title race", rank: "your ranking", resume: "the teams you've played", rep: "league pride" };
+        const say = (sg) => (sg.key === "rivals" && sg.rivals && sg.rivals.length ? `hurting ${name(ix, sg.rivals[0])}` : phrase[sg.key] || sg.label.toLowerCase());
+        split = `Split: ${say(forPick)} says ${name(ix, pick)}; ${say(against)} says ${name(ix, other)}. Going with ${say(forPick)}.`;
       }
     }
     const u = (q) => 0.35 + 0.65 * Math.sqrt(4 * q * (1 - q));
@@ -472,11 +476,22 @@
       preStars: mine ? null : Math.round(toStars(prePriority, OVERALL_STEPS) * 2) / 2,
       signals, conflict, split, spectacle: spec,
       group,
+      rival: rivalOf(signals, pick, mine),
       routine: group === "rank" && routineLadder(ix, fan, g, p, pNow),
       reason: lead ? lead.short : null,
       heart: signals.some((s) => s.kind === "heart"),
       result,
     };
+  }
+
+  /** The rival a card is about: a rival who is playing and whom you're rooting against, whatever
+   * reason leads; or, when the rival reason leads, the rival a result elsewhere would hurt. */
+  function rivalOf(signals, pick, mine) {
+    const s = signals.find((x) => x.key === "rivals" && x.rivals && x.rivals.length && !x.both);
+    if (mine || !s) return null;
+    if (s.playing && s.playing !== pick) return { id: s.playing, playing: true };
+    if (!s.playing && signals[0] === s) return { id: s.rivals[0], playing: false };
+    return null;
   }
 
   /** A playoff-ladder game that's business as usual: a ranked team expected to beat an unranked
