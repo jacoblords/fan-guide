@@ -114,6 +114,10 @@
   .wk.now { box-shadow: inset 0 0 0 2px var(--accent); border-color: var(--accent); }
   .wk[aria-pressed="true"] { background: var(--ink); color: var(--card); border-color: var(--ink); }
   .wk-d { margin-left: 4px; }
+  /* Your rivals, at the end of the week row: why their games are on the board. */
+  .rv { margin-left: auto; display: inline-flex; align-items: center; gap: 7px; border: 0; background: none; padding: 2px 0 2px 8px; cursor: pointer; color: var(--muted); font: inherit; }
+  .rv .wk-l { margin-right: 1px; }
+  .rv:hover .wk-l { color: var(--ink); }
   .hero .top { display: flex; gap: 12px; align-items: flex-start; }
   .stake { font-size: 19px; font-weight: 600; line-height: 1.3; margin: 0; text-wrap: balance; }
   .pull { font-size: 16px; margin: 8px 0 0; }
@@ -612,7 +616,9 @@ function render() {
   const pullHTML = esc(h.pull).replace(/(Beat |pull for |Pull for )([^,.]+)/g, (m, a, b) => a + "<b>" + b + "</b>").replace(/(, |and )([A-Z][^,.]*?)(?=,| and|\.)/g, (m, a, b) => (b.startsWith("<b>") || b.startsWith("pull") ? m : a + "<b>" + b + "</b>"));
   // Week buttons, as on Title Paths' gameday: this week ringed, the one shown filled.
   const chips = weeks.map((w) => `<button data-week="${w}" class="wk${w === DATA.week ? " now" : ""}" aria-pressed="${w === state.week}"${w === DATA.week ? ' title="This week"' : ""}>${w}</button>`).join("");
-  $("#hero").innerHTML = `<div class="weeknav" role="group" aria-label="Week"><span class="wk-l">Week</span>${chips}<span class="wk-d">${range ? "from " + esc(range) : ""}</span></div>
+  const rv = f.rivals.filter((id) => IX.teams.has(id));
+  const rvHTML = rv.length ? `<button class="rv" data-tune title="Your rivals: ${esc(rv.map(nm).join(", "))}. Their losses count for you."><span class="wk-l">Rivals</span>${rv.map(nope).join("")}</button>` : "";
+  $("#hero").innerHTML = `<div class="weeknav" role="group" aria-label="Week"><span class="wk-l">Week</span>${chips}<span class="wk-d">${range ? "from " + esc(range) : ""}</span>${rvHTML}</div>
     <div class="top">${logo(state.team, "lg")}<div><p class="stake">${esc(h.stake)}</p>${h.pull ? `<p class="pull">${pullHTML}</p>` : ""}</div></div>
     ${h.talk ? `<p class="talk">💬 ${esc(h.talk)}</p>` : ""}
     ${tally.won + tally.lost ? `<span class="tally">Your week so far: ${tally.won}-${tally.lost}</span>` : ""}`;
@@ -968,6 +974,7 @@ $("#foot").addEventListener("click", (e) => {
 });
 window.addEventListener("hashchange", () => { const id = IX && IX.byAbbr.get(decodeURIComponent(location.hash.slice(1))); if (id && id !== state.team) pickTeam(id); });
 $("#hero").addEventListener("click", (e) => {
+  if (e.target.closest && e.target.closest("[data-tune]")) return $("#tune").showModal();
   const w = e.target.closest && e.target.closest(".wk");
   if (w) { state.week = +w.dataset.week; state.showAll = false; render(); }
 });
