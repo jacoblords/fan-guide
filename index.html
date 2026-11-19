@@ -161,6 +161,13 @@
   .tug { display: grid; grid-template-columns: auto minmax(60px, 1fr); gap: 4px 10px; align-items: center; margin-top: 8px; font-size: 13px; }
   .tug .ends { grid-column: 2; display: flex; justify-content: space-between; font-size: 11.5px; color: var(--faint); }
   .tug .lab { font-weight: 600; }
+  .rival-lab { display: inline-flex; align-items: center; gap: 6px; color: var(--bad); }
+  /* Rival: the team's logo with a red slash, ringed in the card color so it reads on any logo. */
+  .nope { position: relative; display: inline-flex; flex: none; line-height: 0; vertical-align: -4px; }
+  .nope img.logo { width: 20px; height: 20px; }
+  .nope::after { content: ""; position: absolute; left: -16%; right: -16%; top: 50%; height: 2.5px; margin-top: -1.25px;
+    background: var(--bad); border-radius: 2px; transform: rotate(-40deg); box-shadow: 0 0 0 1.5px var(--card); }
+  .root .nope { margin-right: 4px; }
   .tug .track { position: relative; height: 10px; border-radius: 5px; background: var(--chip); }
   .tug .track::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1.5px; background: var(--faint); }
   .tug .fill { position: absolute; top: 1px; bottom: 1px; border-radius: 4px; }
@@ -385,14 +392,20 @@ function linksHTML(g) {
     <a href="https://x.com/search?q=${encodeURIComponent(q)}&amp;f=live" target="_blank" rel="noopener" title="Live posts on X">X</a></div>`;
 }
 
+// A rival's logo with a red slash through it: says "rival" and which one, without words.
+const nope = (id) => `<span class="nope" title="Rival: ${esc(nm(id))}">${logo(id, "sm")}</span>`;
+
 function tugHTML(r) {
   const g = r.game, ca = T(g.away).color || "#888", ch = T(g.home).color || "#888";
-  const rows = r.signals.filter((s) => !s.both).map((s) => {
+  const ordered = [...r.signals.filter((s) => !s.both && s.key !== "rivals"), ...r.signals.filter((s) => !s.both && s.key === "rivals")];
+  const rows = ordered.map((s) => {
     const w = Math.min(50, (Math.abs(s.stars) / 5) * 50);
     const toHome = s.stars > 0;
     const fill = toHome ? `left:50%;width:${w}%;background:${esc(ch)}` : `right:50%;width:${w}%;background:${esc(ca)}`;
     const tag = `${esc(nm(toHome ? g.home : g.away))}, ${size(s.stars)}`;
-    return `<div class="lab">${esc(s.label)}</div><div class="track" role="img" aria-label="${esc(s.label)}: pulls toward ${tag}"><div class="fill" style="${fill}"></div></div>
+    const lab = s.key === "rivals" && s.rivals && s.rivals.length
+      ? `<span class="rival-lab">${[...new Set(s.rivals)].map(nope).join("")} Rival</span>` : esc(s.label);
+    return `<div class="lab">${lab}</div><div class="track" role="img" aria-label="${esc(s.label)}: pulls toward ${tag}"><div class="fill" style="${fill}"></div></div>
       <div class="det">${esc(s.text)}${s.link ? ` · <a href="${esc(s.link)}" target="_blank" rel="noopener">title paths</a>` : ""}</div>`;
   }).join("");
   if (!rows) return "";
@@ -421,6 +434,8 @@ function cardHTML(r, opts = {}) {
   const head = [when, g.tv && !g.done ? esc(g.tv) : "", g.spread && !scored ? esc(g.spread) : ""].filter(Boolean).join(" · ");
   let root;
   if (r.mine) root = `Go <b>${esc(nm(r.pick))}</b>`;
+  else if (r.rival && r.rival.playing) root = `${nope(r.rival.id)} Root against <b>${esc(nm(r.rival.id))}</b>`;
+  else if (r.rival && r.pick) root = `${nope(r.rival.id)} Root for <b>${esc(nm(r.pick))}</b>`;
   else if (r.pick) root = `Root for <b>${esc(nm(r.pick))}</b>`;
   else root = `<span class="muted">No side to take</span>`;
   const going = li && li.going ? `<span class="pill ${li.going}">${li.going === "yes" ? "Going your way" : "Not going your way"}</span>` : "";
@@ -453,9 +468,10 @@ function compactHTML(r) {
   const other = r.pick === g.home ? g.away : g.home;
   const named = r.pick && (T(r.pick).short || T(r.pick).name);
   const line = !r.pick ? `${rkName(g.away)} at ${rkName(g.home)}`
+    : r.rival && r.rival.playing ? `Root against <b>${rkName(r.rival.id)}</b> <span class="muted">vs ${rkName(r.pick)}</span>`
     : named ? `Root for <b>${rkName(r.pick)}</b> over ${rkName(other)}` : `Root against <b>${rkName(other)}</b>`;
   const when = g.state === "in" ? `<b style="color:var(--live)">${esc(T(g.away).abbr || "")} ${esc(g.awayScore)}-${esc(g.homeScore)} ${esc(T(g.home).abbr || "")}</b>` : esc(kickoff(g));
-  return `<div class="rowg"><div class="l1"><span class="t">${when}</span>${r.pick ? logo(r.pick, "sm") : ""}<span>${line}</span>${r.conflict ? '<span class="pill split" title="' + esc(r.split || "") + '">⇄</span>' : ""}<span class="s">${starsHTML(r.stars)}</span></div>
+  return `<div class="rowg"><div class="l1"><span class="t">${when}</span>${r.rival ? nope(r.rival.id) : r.pick ? logo(r.pick, "sm") : ""}<span>${line}</span>${r.conflict ? '<span class="pill split" title="' + esc(r.split || "") + '">⇄</span>' : ""}<span class="s">${starsHTML(r.stars)}</span></div>
     <div class="l2">${esc(r.reason || "")}</div></div>`;
 }
 
