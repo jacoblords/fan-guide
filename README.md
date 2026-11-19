@@ -56,6 +56,16 @@ its ESPN / r/CFB / X links, and its in-game win-probability chart (`wpChart`, dr
 play-by-play odds that `fetch.py` collects for games under way, as Title Paths' fetcher does). A
 live game's re-scoring uses the chart's latest point; without one it estimates from the score.
 
+## Live updates
+
+While the page is on screen it asks Title Paths' live-scores worker (`LIVE_URL`, a repository
+variable the deploy passes to `fetch.py`, which puts it in `data.json`) for this week's games under
+way every 30 seconds: score, clock and ESPN's win-probability chart, one shared ESPN call per game
+per 30 seconds however many people watch. Every minute it re-reads `data.json` for new results and
+odds. It redraws in place, keeping the team, week, open cards and scroll position. The worker must
+list this site's origin in its `ORIGINS` (Title Paths' `trigger/wrangler.toml`). Charts show the
+game clock and both teams' odds at any moment you hover (or drag a finger) over them.
+
 ## Data
 
 [`fetch.py`](fetch.py) writes `data.json`: every game with an FBS team this season, the whole regular
@@ -78,6 +88,6 @@ python3 -m http.server 8765
 ## Not done yet
 
 - A committee model to replace the ranking and résumé heuristics, backtested against the CFP's weekly rankings.
-- Real live updates: polling (or Title Paths' live-scores worker), in-game win-probability charts, and lead-change counts. `fetch.py` already records state, period, clock, in-game scores and ESPN's win-probability chart; the page still needs to poll for them during games.
+- Lead-change counts for the live amplifier.
 - Postseason and bowl weeks.
 - A real name and domain.

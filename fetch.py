@@ -10,6 +10,8 @@ import argparse
 import bisect
 import datetime as dt
 import json
+import os
+import re
 import sys
 import time
 import urllib.error
@@ -283,6 +285,13 @@ def fetch_title_paths():
     return out
 
 
+def live_url():
+    """The live-scores worker the page polls during games (Title Paths' Cloudflare worker),
+    from the LIVE_URL repository variable. Unset or malformed: none, and the page doesn't poll."""
+    url = (os.environ.get("LIVE_URL") or "").strip().rstrip("/")
+    return url if re.fullmatch(r"https://[a-z0-9][a-z0-9.-]*[a-z0-9](:\d+)?", url) else None
+
+
 def records(games):
     rec = {}
     for g in games:
@@ -358,6 +367,7 @@ def main():
         "teams": sorted(teams.values(), key=lambda t: t["name"] or ""),
         "games": sorted(games, key=lambda g: (g["date"], g["id"])),
         "confOdds": conf_odds,
+        "liveUrl": live_url(),
     }
     with open(args.out, "w") as f:
         json.dump(data, f, separators=(",", ":"))
