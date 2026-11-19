@@ -1,7 +1,7 @@
-# Gameday Guide
+# Gameday Stakes
 
 Pick your college football team and see this week's games that matter to you: who to root
-for, and why, from signals that can disagree. A companion to [Title Paths](https://titlepaths.com),
+for, and why, from signals that can disagree. Lives at https://gamedaystakes.com. A sibling of [Title Paths](https://titlepaths.com),
 which supplies the exact conference-race odds.
 
 ## How a game is scored
