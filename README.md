@@ -1,4 +1,4 @@
-# Rooting Guide (working name)
+# Gameday Guide
 
 Pick your college football team and see this week's games that matter to you: who to root
 for, and why, from signals that can disagree. A companion to [Title Paths](https://titlepaths.com),
