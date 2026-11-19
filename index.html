@@ -826,8 +826,9 @@ function demoLive(d, rv, team) {
   // top-rated games are under way.
   const movers = (gid) => Object.values(d.confOdds || {}).reduce((n, c) =>
     n + Object.values((c.games || {})[gid] || {}).filter(([a, b]) => a != null && Math.abs(a - b) >= 0.01).length, 0);
-  rows.filter((r) => !used.has(r.game.id) && movers(r.game.id) > 0)
-    .sort((a, b) => movers(b.game.id) - movers(a.game.id)).slice(0, 4)
+  // Only games this team cares about (the Final section lists those), title-race movers first.
+  rows.filter((r) => !used.has(r.game.id) && !r.mine && (r.stars || 0) >= 1)
+    .sort((a, b) => movers(b.game.id) - movers(a.game.id) || (b.stars || 0) - (a.stars || 0)).slice(0, 4)
     .forEach((r, i) => final(take(r), i === 1 ? (FanScore.pHome(ix, r.game) >= 0.5 ? r.game.away : r.game.home) : (FanScore.pHome(ix, r.game) >= 0.5 ? r.game.home : r.game.away)));
   const top = rows.filter((r) => !r.mine && !used.has(r.game.id) && (r.stars || 0) >= 2).slice(0, 7);
   top.slice(0, 4).forEach((r, i) => live(take(r), 2 + (i % 3), i === 1 ? -6 : 4 + i * 3));
