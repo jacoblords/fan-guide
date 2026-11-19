@@ -726,6 +726,9 @@ function demoLive(d, rv, team) {
 
 // Demo game day: from ?demo=live, or the footer's toggle (where the address can't carry it).
 let demo = params.get("demo") === "live";
+// The demo's toggle is for testing: shown when running locally, or when the address asks for it
+// (?demo=…), never on the real site otherwise.
+const demoAllowed = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname) || params.has("demo");
 
 async function boot() {
   const [d, rv] = await Promise.all([fetch("data.json", { cache: "no-cache" }).then((r) => r.json()), fetch("rivals.json").then((r) => r.json())]);
@@ -740,7 +743,7 @@ async function boot() {
   $("#foot").innerHTML = `${d.fixture ? '<span class="badge">test data</span>' : ""}${demo ? '<span class="badge">demo scores</span>' : ""}
     Updated ${esc(updated)}. Win odds from ESPN, conference odds from <a href="https://titlepaths.com/">Title Paths</a>, rankings from the ${esc(d.poll.poll || "polls")}.
     Ranking and record effects are estimates.
-    <div style="margin-top:8px"><button class="btn" id="demoToggle">${demo ? "Back to the real schedule" : "Preview game day (fake scores)"}</button></div>`;
+    ${demoAllowed ? `<div style="margin-top:8px"><button class="btn" id="demoToggle">${demo ? "Back to the real schedule" : "Preview game day (fake scores)"}</button></div>` : ""}`;
   setTeam(team);
 }
 
