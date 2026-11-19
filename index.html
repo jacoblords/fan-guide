@@ -580,20 +580,27 @@ function movedHTML(g) {
   return rows.map(({ id, d }) => `<span class="mv${id === state.team ? " me" : ""}"><b>${esc(T(id).abbr || nm(id))}</b><span class="delta ${d > 0 ? "up" : "down"}"><span aria-hidden="true">${d > 0 ? "▲" : "▼"}${Math.abs(d)}</span><span class="vh"> ${d > 0 ? "up" : "down"} ${Math.abs(d)} point${Math.abs(d) === 1 ? "" : "s"}</span></span></span>`).join("");
 }
 
-// The records behind a finished game's other reasons, counted from the games themselves:
-// "Vs other leagues Big 12 21-14 → 22-14", "Teams you played UTAH 6-3 → 7-3". The new record
-// is green when it helps you. A card shows two lines at most: title odds, then the record for
-// its strongest other reason. A game that goes final while the page is open rolls the new
-// record in (FRESH; see render()).
-const wl = (r) => `${r[0]}-${r[1]}`;
+// What a finished game did beyond the title race: "Vs other leagues Big 12 21-14 → 22-14",
+// counted from the games, and "Est. rank CFP No. 14 → No. 12 · SOR No. 18 → No. 15", estimated
+// (see FanScore.aftermath). The new number is green when it helps you. A card shows two lines
+// at most: title odds, then its strongest other reason. A game that goes final while the page
+// is open rolls the new number in (FRESH; see render()).
+// A record as 7-3, a rank as No. 12, no rank as NR.
+const show = (v) => (Array.isArray(v) ? `${v[0]}-${v[1]}` : v ? `No. ${v}` : "NR");
 function afterHTML(r) {
   const g = r.game, lines = [];
   const odds = movedHTML(g);
   if (odds) lines.push(["Title odds", odds]);
-  const rank = (k) => { const i = r.signals.findIndex((s) => s.key === k); return i < 0 ? 99 : i; };
-  const recs = FanScore.aftermath(IX, fan(), g).sort((a, b) => rank(a.key) - rank(b.key));
+  // Your own game leads with the ranking line. Someone else's game shows it only when the card
+  // is about rankings or the teams you've played, or the poll estimate moved: any game near you
+  // in SOR nudges you a place, which on its own is noise.
+  const at = (k) => { const i = r.signals.findIndex((s) => s.key === k); return i < 0 ? 99 : i; };
+  const rank = (k) => (k === "rank" ? (r.mine ? -1 : Math.min(at("rank"), at("resume"))) : at(k));
+  const recs = FanScore.aftermath(IX, fan(), g)
+    .filter((a) => a.key !== "rank" || r.mine || rank("rank") < 99 || a.items.some((it) => it.tag !== "SOR"))
+    .sort((a, b) => rank(a.key) - rank(b.key));
   for (const a of recs.slice(0, 2 - lines.length)) {
-    lines.push([a.label, a.items.map((it) => `<span class="mv${it.id === state.team ? " me" : ""}"><b>${esc(it.tag)}</b>${wl(it.was)}<span class="ar" aria-hidden="true">→</span><span class="vh"> to </span><span class="nw delta ${it.good ? "up" : "down"}">${wl(it.now)}</span></span>`).join("")]);
+    lines.push([a.label, a.items.map((it) => `<span class="mv"><b>${esc(it.tag)}</b>${show(it.was)}<span class="ar" aria-hidden="true">→</span><span class="vh"> to </span><span class="nw delta ${it.good ? "up" : "down"}">${show(it.now)}</span></span>`).join("")]);
   }
   const fresh = FRESH.has(g.id) ? " fresh" : "";
   return lines.map(([lbl, run]) => `<div class="moved${fresh}"><span class="lbl">${esc(lbl)}</span><div class="mv-track"><div class="mv-belt"><span class="mv-run">${run}</span></div></div></div>`).join("");

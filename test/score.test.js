@@ -349,21 +349,51 @@ test("a cross-league result moves your league's record, counted up to that game"
   const h = ix.data.games.find((x) => x.id === "h");
   const a = S.aftermath(ix, { team: "X" }, h);
   const rep = a.find((x) => x.key === "rep");
-  assert.deepStrictEqual(rep.items[0], { id: null, tag: "Big 12", was: [1, 2], now: [2, 2], good: true });
+  assert.deepStrictEqual(rep.items[0], { tag: "Big 12", was: [1, 2], now: [2, 2], good: true });
 });
 
-test("a team you played shows its record before and after, a win for it good for you", () => {
-  const ix = afterFixture();
-  const h = ix.data.games.find((x) => x.id === "h");
-  const res = S.aftermath(ix, { team: "X" }, h).find((x) => x.key === "resume");
-  // B before game h: lost to X, beat O, lost to Notre Dame.
-  assert.deepStrictEqual(res.items, [{ id: "B", tag: "B", was: [1, 2], now: [2, 2], good: true }]);
-});
-
-test("no record lines for an unfinished game, a conference game, or your own game's opponent", () => {
+test("no league line for an unfinished game or a conference game", () => {
   const ix = afterFixture();
   const h = { ...ix.data.games.find((x) => x.id === "h") };
   assert.deepStrictEqual(S.aftermath(ix, { team: "X" }, { ...h, done: false }), []);
-  assert.deepStrictEqual(S.aftermath(ix, { team: "X" }, { ...h, conf: true }).map((x) => x.key), ["resume"]);
-  assert.deepStrictEqual(S.aftermath(ix, { team: "X" }, ix.data.games.find((x) => x.id === "a")), []);
+  assert.ok(!S.aftermath(ix, { team: "X" }, { ...h, conf: true }).some((x) => x.key === "rep"));
+});
+
+// A league of eight, ranked by the CFP on Nov 3; each team has played three games by then.
+function rankFixture(extra = []) {
+  const ids = ["T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8"];
+  const teams = ids.map((id, i) => ({ id, abbr: id, short: id, conf: "4", fpi: 20 - 3 * i, rank: i < 6 ? i + 1 : null }));
+  const games = [];
+  let n = 0;
+  const day = (d) => `2026-${d}T19:00Z`;
+  // Three rounds before the poll: the better team wins at home.
+  for (const [d, pairs] of [["10-10", [[0, 1], [2, 3], [4, 5], [6, 7]]], ["10-17", [[0, 2], [1, 3], [4, 6], [5, 7]]], ["10-24", [[0, 3], [1, 2], [4, 7], [5, 6]]]]) {
+    for (const [h, a] of pairs) games.push({ id: "p" + n++, week: 8, date: day(d), home: ids[h], away: ids[a], conf: true, done: true, winner: ids[h] });
+  }
+  games.push(...extra.map((g, k) => ({ id: "x" + k, week: 10, date: day(g.d), home: g.home, away: g.away, conf: true, done: true, winner: g.winner })));
+  return S.index({ season: 2026, week: 10, poll: { poll: "CFP", date: "2026-11-03T08:00Z" }, confs: { 4: { name: "Big 12", p4: true } }, teams, games });
+}
+const rankLine = (ix, team, gid) => (S.aftermath(ix, { team }, ix.data.games.find((g) => g.id === gid)).find((x) => x.key === "rank") || {}).items || [];
+
+test("losing to an unranked team drops your estimated poll rank and SOR", () => {
+  const ix = rankFixture([{ d: "11-07", home: "T7", away: "T3", winner: "T7" }]);
+  const [cfp, sor] = rankLine(ix, "T3", "x0");
+  assert.strictEqual(cfp.tag, "CFP");
+  assert.strictEqual(cfp.was, 3);
+  assert.ok(cfp.now >= 6, `fell from 3 to ${cfp.now}`); // below everyone ranked 4-6
+  assert.strictEqual(cfp.good, false);
+  assert.strictEqual(sor.tag, "SOR");
+  assert.ok(sor.now > sor.was && !sor.good);
+});
+
+test("a team ranked just above you losing moves you up", () => {
+  const ix = rankFixture([{ d: "11-07", home: "T8", away: "T4", winner: "T8" }]);
+  const cfp = rankLine(ix, "T5", "x0").find((x) => x.tag === "CFP");
+  assert.deepStrictEqual([cfp.was, cfp.now, cfp.good], [5, 4, true]);
+});
+
+test("games before the poll don't move the poll estimate, and SOR waits for three games", () => {
+  const ix = rankFixture([{ d: "11-01", home: "T8", away: "T4", winner: "T8" }]);
+  assert.ok(!rankLine(ix, "T5", "x0").some((x) => x.tag === "CFP"));
+  assert.deepStrictEqual(rankLine(ix, "T1", "p4"), []); // T1's second game
 });
