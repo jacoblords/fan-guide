@@ -477,7 +477,7 @@
       signals, conflict, split, spectacle: spec,
       group,
       rival: rivalOf(signals, pick, mine),
-      routine: group === "rank" && routineLadder(ix, fan, g, p, pNow),
+      routine: group === "rank" ? routineLadder(ix, fan, g, p, pNow) : group === "resume" ? routineResume(ix, g, p, pNow, pick) : false,
       reason: lead ? lead.short : null,
       heart: signals.some((s) => s.kind === "heart"),
       result,
@@ -507,6 +507,19 @@
     const dogHome = p < 0.5;
     const upsetLive = g.state === "in" && (dogHome ? pNow : 1 - pNow) >= 0.4;
     return !clash && !upsetLive;
+  }
+
+  /** A Teams-you've-played game that's chalk: the team you want to win is a heavy favorite (75%
+   * or better) against an unranked opponent, so the expected result does little for your record.
+   * Shown anyway when it faces a ranked team or an upset is under way. */
+  const CHALK_FAVORITE = 0.75;
+  function routineResume(ix, g, p, pNow, pick) {
+    if (!pick) return false;
+    const opp = pick === g.home ? g.away : g.home;
+    if ((ix.teams.get(opp) || {}).rank) return false;
+    const pPick = pick === g.home ? p : 1 - p;
+    const upsetLive = g.state === "in" && (pick === g.home ? 1 - pNow : pNow) >= 0.4;
+    return pPick >= CHALK_FAVORITE && !upsetLive;
   }
 
   /** Every game of `week`, scored for `fan` = {team, rivals: [ids], weights?, rivalsOf?}. */

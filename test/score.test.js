@@ -272,3 +272,18 @@ test("a split involving a rival is said in fan terms", () => {
   const r = S.scoreGame(ix, fan(ix, ["R"]), ix.data.games[1]);
   if (r.split) assert.doesNotMatch(r.split, /rivals says|matters more/);
 });
+
+test("teams you've played: a heavy favorite against an unranked team is chalk", () => {
+  const ix = fixture();
+  const g = ix.data.games[1]; // A hosts B; X beat B
+  Object.assign(g, { pHome: 0.15 }); // B is an 85% favorite on the road
+  ix.data.confOdds[4].games.g1 = {}; // no title-race reason, so the résumé leads
+  ix.data.teams.find((t) => t.id === "A").rank = null;
+  const r = S.scoreGame(S.index(ix.data), fan(ix), g);
+  assert.strictEqual(r.group, "resume");
+  assert.strictEqual(r.routine, true);
+  const live = { ...g, state: "in", period: 4, clock: "4:00", homeScore: 24, awayScore: 20 };
+  assert.strictEqual(S.scoreGame(S.index(ix.data), fan(ix), live).routine, false, "upset under way");
+  Object.assign(g, { pHome: 0.45 });
+  assert.strictEqual(S.scoreGame(S.index(ix.data), fan(ix), g).routine, false, "a real game");
+});
