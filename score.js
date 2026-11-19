@@ -638,13 +638,76 @@
     return { score, why, hot: !!why && (r.mine || (r.stars || 0) >= 2), going, upset, climbed };
   }
 
+  // ---- after the final: records before and after a finished game -------------------------
+
+  /** Games in the order they were played (kickoff, then id, so a tie still has an order). */
+  const before = (a, b) => a.date < b.date || (a.date === b.date && String(a.id) < String(b.id));
+
+  /** A team's win-loss record from the finished games played before g. */
+  function recordBefore(ix, tid, g) {
+    const r = [0, 0];
+    for (const x of ix.played.get(tid) || []) if (before(x, g)) r[x.winner === tid ? 0 : 1]++;
+    return r;
+  }
+
+  /** Which leagues a game is between, if it counts for league pride: two FBS teams from different
+   * conferences, independents left out except Notre Dame (as repSignal counts them). */
+  function crossLeague(ix, g) {
+    const H = ix.teams.get(g.home), A = ix.teams.get(g.away);
+    if (!H || !A || g.conf || !isFBS(ix, H.id) || !isFBS(ix, A.id) || H.conf === A.conf) return null;
+    const ok = (t) => t.conf !== "18" || t.id === "87";
+    return ok(H) && ok(A) ? [H.conf, A.conf] : null;
+  }
+
+  /** A conference's record against other leagues from the finished games played before g. */
+  function leagueBefore(ix, conf, g) {
+    const r = [0, 0];
+    for (const x of ix.data.games) {
+      if (!x.done || x.canceled || !x.winner || !before(x, g)) continue;
+      const c = crossLeague(ix, x);
+      if (!c || (c[0] !== conf && c[1] !== conf)) continue;
+      r[ix.teams.get(x.winner).conf === conf ? 0 : 1]++;
+    }
+    return r;
+  }
+
+  /**
+   * What a finished game did to the records behind a fan's other reasons, each counted from the
+   * games themselves: [{ key, label, items: [{ id, tag, was, now, good }] }].
+   *   rep     the fan's league against other leagues, when the game was one of those
+   *   resume  the records of teams the fan played earlier ("good": their wins help you)
+   */
+  function aftermath(ix, fan, g) {
+    const X = ix.teams.get(fan.team);
+    if (!X || !g.done || g.canceled || !g.winner) return [];
+    const add = (r, won) => (won ? [r[0] + 1, r[1]] : [r[0], r[1] + 1]);
+    const out = [];
+    const c = crossLeague(ix, g);
+    if (c && X.conf !== "18" && (c[0] === X.conf || c[1] === X.conf)) {
+      const was = leagueBefore(ix, X.conf, g), won = ix.teams.get(g.winner).conf === X.conf;
+      const cn = (ix.data.confs[X.conf] || {}).name || "Your league";
+      out.push({ key: "rep", label: "Vs other leagues", items: [{ id: null, tag: cn, was, now: add(was, won), good: won }] });
+    }
+    if (g.home !== fan.team && g.away !== fan.team) {
+      const met = (ix.played.get(fan.team) || []).filter((x) => before(x, g));
+      const items = [];
+      for (const tid of [g.home, g.away]) {
+        if (!met.some((x) => x.home === tid || x.away === tid)) continue;
+        const t = ix.teams.get(tid), was = recordBefore(ix, tid, g), won = g.winner === tid;
+        items.push({ id: tid, tag: (t && t.abbr) || name(ix, tid), was, now: add(was, won), good: won });
+      }
+      if (items.length) out.push({ key: "resume", label: "Teams you played", items });
+    }
+    return out;
+  }
+
   /** Default rivals from rivals.json (by abbreviation), as team ids. */
   function defaultRivals(ix, rivalsJson, tid) {
     const t = ix.teams.get(tid);
     return ((t && rivalsJson[t.abbr]) || []).map((a) => ix.byAbbr.get(a)).filter(Boolean);
   }
 
-  const api = { SIGNALS, DEFAULT_WEIGHTS, STAR_STEPS, lines, toStars, index, pHome, liveP, name, scoreGame, scoreWeek, headline, liveInterest, defaultRivals, pct };
+  const api = { SIGNALS, DEFAULT_WEIGHTS, STAR_STEPS, lines, toStars, index, pHome, liveP, name, scoreGame, scoreWeek, headline, liveInterest, defaultRivals, pct, aftermath };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.FanScore = api;
 })(typeof self !== "undefined" ? self : this);

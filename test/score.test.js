@@ -321,3 +321,49 @@ test("a finished game keeps its title-race reason, rebuilt from the odds recorde
   assert.ok(Math.abs(after.stars - before.stars) <= 0.5, `rating about the same (${before.stars} -> ${after.stars})`);
   assert.match(conf.text, /40% before, 55% after B won/);
 });
+
+// ---- aftermath: records before and after a finished game ----
+
+function afterFixture() {
+  const team = (id, conf = "4") => ({ id, abbr: id, name: id, short: id, conf, record: [0, 0], fpi: 10, rank: null, pickable: true });
+  const g = (id, date, home, away, winner, conf = false) => ({ id, week: 1, date, home, away, conf, done: true, winner, homeScore: 1, awayScore: 0 });
+  return S.index({
+    season: 2026, week: 5,
+    confs: { 4: { name: "Big 12", p4: true }, 8: { name: "SEC", p4: true }, 18: { name: "FBS Independents" } },
+    teams: [team("X"), team("B"), team("C"), team("O", "8"), team("P", "8"), team("ND", "18"), team("ARMY", "18"), team("F", "999")].map((t) => (t.id === "ND" ? { ...t, id: "87" } : t)),
+    games: [
+      g("a", "2026-09-05T19:00Z", "X", "B", "X", true), // X beat B
+      g("b", "2026-09-06T19:00Z", "B", "O", "B"), // league 1-0
+      g("c", "2026-09-07T19:00Z", "C", "P", "P"), // league 1-1
+      g("d", "2026-09-08T19:00Z", "B", "87", "87"), // Notre Dame counts: league 1-2
+      g("e", "2026-09-09T19:00Z", "C", "ARMY", "C"), // other independents don't
+      g("f", "2026-09-10T19:00Z", "C", "F", "C"), // nor FCS
+      g("h", "2026-09-12T19:00Z", "O", "B", "B"), // the game under test
+      g("i", "2026-09-20T19:00Z", "B", "P", "P"), // after it: not counted
+    ],
+  });
+}
+
+test("a cross-league result moves your league's record, counted up to that game", () => {
+  const ix = afterFixture();
+  const h = ix.data.games.find((x) => x.id === "h");
+  const a = S.aftermath(ix, { team: "X" }, h);
+  const rep = a.find((x) => x.key === "rep");
+  assert.deepStrictEqual(rep.items[0], { id: null, tag: "Big 12", was: [1, 2], now: [2, 2], good: true });
+});
+
+test("a team you played shows its record before and after, a win for it good for you", () => {
+  const ix = afterFixture();
+  const h = ix.data.games.find((x) => x.id === "h");
+  const res = S.aftermath(ix, { team: "X" }, h).find((x) => x.key === "resume");
+  // B before game h: lost to X, beat O, lost to Notre Dame.
+  assert.deepStrictEqual(res.items, [{ id: "B", tag: "B", was: [1, 2], now: [2, 2], good: true }]);
+});
+
+test("no record lines for an unfinished game, a conference game, or your own game's opponent", () => {
+  const ix = afterFixture();
+  const h = { ...ix.data.games.find((x) => x.id === "h") };
+  assert.deepStrictEqual(S.aftermath(ix, { team: "X" }, { ...h, done: false }), []);
+  assert.deepStrictEqual(S.aftermath(ix, { team: "X" }, { ...h, conf: true }).map((x) => x.key), ["resume"]);
+  assert.deepStrictEqual(S.aftermath(ix, { team: "X" }, ix.data.games.find((x) => x.id === "a")), []);
+});
