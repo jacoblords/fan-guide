@@ -528,9 +528,14 @@
       stake = `${n} is ${mood} the ${race.name} race: ${pct(p)} to reach the title game.`;
     } else if (X && X.rank) stake = `${n} is No. ${X.rank}, and this week is about the rankings.`;
     else stake = `${n} is playing for pride and a bowl this week.`;
-    const picks = rows.filter((r) => !r.mine && r.pick && r.stars >= 3 && !r.conflict).slice(0, 3);
+    const played = (r) => r.game.done && !r.game.canceled && r.game.winner;
+    const picks = rows.filter((r) => !r.mine && r.pick && r.stars >= 3 && !r.conflict && !played(r)).slice(0, 3);
     let pull = "";
-    if (own) {
+    if (own && played(own)) {
+      const g = own.game, opp = g.home === fan.team ? g.away : g.home;
+      const [us, them] = g.home === fan.team ? [g.homeScore, g.awayScore] : [g.awayScore, g.homeScore];
+      pull = `${g.winner === fan.team ? "Beat" : "Lost to"} ${name(ix, opp)}${us != null ? ` ${us}-${them}` : ""}`;
+    } else if (own) {
       const opp = own.game.home === fan.team ? own.game.away : own.game.home;
       pull = `Beat ${name(ix, opp)}`;
     }

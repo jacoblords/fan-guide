@@ -96,9 +96,13 @@
 
   /* This week */
   .hero { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px 16px; }
-  .weeknav { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--muted); margin-bottom: 8px; }
-  .weeknav button { border: 0; background: none; cursor: pointer; color: var(--accent); padding: 2px 6px; font-size: 16px; }
-  .weeknav button:disabled { color: var(--faint); cursor: default; }
+  .weeknav { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+  .wk-l { font-family: var(--display); font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; font-size: 12px; margin-right: 3px; }
+  .wk { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); background: var(--card); cursor: pointer; font: 600 13px var(--body); color: var(--ink); padding: 0; font-variant-numeric: tabular-nums; }
+  .wk:hover { border-color: var(--muted); }
+  .wk.now { box-shadow: inset 0 0 0 2px var(--accent); border-color: var(--accent); }
+  .wk[aria-pressed="true"] { background: var(--ink); color: var(--card); border-color: var(--ink); }
+  .wk-d { margin-left: 4px; }
   .hero .top { display: flex; gap: 12px; align-items: flex-start; }
   .stake { font-size: 19px; font-weight: 600; line-height: 1.3; margin: 0; text-wrap: balance; }
   .pull { font-size: 16px; margin: 8px 0 0; }
@@ -478,10 +482,10 @@ function render() {
   const cal = (DATA.calendar || []).find((c) => c.week === state.week);
   const range = cal ? new Date(cal.start.replace("Z", ":00Z")).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "";
   const weeks = [...new Set(DATA.games.map((g) => g.week))].sort((a, b) => a - b);
-  const canPrev = weeks.includes(state.week - 1), canNext = weeks.includes(state.week + 1);
   const pullHTML = esc(h.pull).replace(/(Beat |pull for |Pull for )([^,.]+)/g, (m, a, b) => a + "<b>" + b + "</b>").replace(/(, |and )([A-Z][^,.]*?)(?=,| and|\.)/g, (m, a, b) => (b.startsWith("<b>") || b.startsWith("pull") ? m : a + "<b>" + b + "</b>"));
-  $("#hero").innerHTML = `<div class="weeknav"><button id="prev" aria-label="Previous week" ${canPrev ? "" : "disabled"}>‹</button>
-      <span>Week ${esc(state.week)}${range ? " · from " + esc(range) : ""}</span><button id="next" aria-label="Next week" ${canNext ? "" : "disabled"}>›</button></div>
+  // Week buttons, as on Title Paths' gameday: this week ringed, the one shown filled.
+  const chips = weeks.map((w) => `<button data-week="${w}" class="wk${w === DATA.week ? " now" : ""}" aria-pressed="${w === state.week}"${w === DATA.week ? ' title="This week"' : ""}>${w}</button>`).join("");
+  $("#hero").innerHTML = `<div class="weeknav" role="group" aria-label="Week"><span class="wk-l">Week</span>${chips}<span class="wk-d">${range ? "from " + esc(range) : ""}</span></div>
     <div class="top">${logo(state.team, "lg")}<div><p class="stake">${esc(h.stake)}</p>${h.pull ? `<p class="pull">${pullHTML}</p>` : ""}</div></div>
     ${h.talk ? `<p class="talk">💬 ${esc(h.talk)}</p>` : ""}
     ${tally.won + tally.lost ? `<span class="tally">Your week so far: ${tally.won}-${tally.lost}</span>` : ""}`;
@@ -740,8 +744,8 @@ $("#foot").addEventListener("click", (e) => {
 });
 window.addEventListener("hashchange", () => { const id = IX && IX.byAbbr.get(decodeURIComponent(location.hash.slice(1))); if (id && id !== state.team) pickTeam(id); });
 $("#hero").addEventListener("click", (e) => {
-  if (e.target.id === "prev") { state.week--; render(); }
-  if (e.target.id === "next") { state.week++; render(); }
+  const w = e.target.closest && e.target.closest(".wk");
+  if (w) { state.week = +w.dataset.week; state.showAll = false; render(); }
 });
 // Remember which cards and groups are open across re-renders (live updates will re-render).
 document.addEventListener("toggle", (e) => {

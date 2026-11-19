@@ -56,9 +56,9 @@ live game's re-scoring uses the chart's latest point; without one it estimates f
 
 ## Data
 
-[`fetch.py`](fetch.py) writes `data.json`: every game with an FBS team this season (ESPN
-scoreboard, one call a week), ESPN's matchup-predictor odds for this week's and next week's
-games, the CFP Top 25 (or the AP poll before it starts), FPI, and Title Paths' conference odds.
+[`fetch.py`](fetch.py) writes `data.json`: every game with an FBS team this season, the whole regular
+season so the page can look ahead (ESPN scoreboard, one call a week), ESPN's matchup-predictor
+odds for this week's and next week's games (later weeks use FPI), the CFP Top 25 (or the AP poll before it starts), FPI, and Title Paths' conference odds.
 Visitors only read the static file. The fetcher identifies itself as `fan-guide (github actions; hourly-ish)`, the format ESPN accepts from Title Paths. [`.github/workflows/update.yml`](.github/workflows/update.yml)
 runs the tests, fetches and deploys to GitHub Pages.
 

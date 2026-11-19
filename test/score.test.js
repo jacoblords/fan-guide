@@ -248,3 +248,11 @@ test("ladder: two ranked teams near you meeting is not routine", () => {
   assert.strictEqual(r.group, "rank");
   assert.strictEqual(r.routine, false);
 });
+
+test("headline for a past week gives your result, not 'Beat X'", () => {
+  const ix = fixture();
+  Object.assign(ix.data.games[3], { done: true, winner: "A", homeScore: 17, awayScore: 24 });
+  const { rows } = S.scoreWeek(S.index(ix.data), fan(ix), 12);
+  const h = S.headline(ix, fan(ix), 12, rows);
+  assert.match(h.pull, /^Lost to A 17-24/);
+});
