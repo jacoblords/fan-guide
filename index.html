@@ -248,6 +248,11 @@
   .mv b { font-family: var(--display); font-weight: 700; letter-spacing: 0.04em; margin-right: 3px; color: var(--ink); }
   .mv.me b { text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 3px; }
   .delta { font-weight: 600; } .delta.up { color: var(--good); } .delta.down { color: var(--bad); }
+  .mv .ar { color: var(--muted); margin: 0 3px; }
+  .moved.fresh .nw { display: inline-block; animation: mv-in 0.7s cubic-bezier(.2,.8,.2,1) 0.5s both; }
+  .moved.fresh .ar { animation: mv-fade 0.4s ease-out 0.3s both; }
+  @keyframes mv-in { from { opacity: 0; transform: translateY(0.7em); } 60% { opacity: 1; transform: translateY(-0.12em); } to { transform: none; } }
+  @keyframes mv-fade { from { opacity: 0; } }
   .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .mv-track.tick { mask-image: linear-gradient(90deg, transparent, #000 12px, #000 calc(100% - 12px), transparent); }
   .mv-track.tick .mv-belt { animation: mv-tick var(--dur, 12s) linear infinite; }
@@ -255,7 +260,7 @@
   @keyframes mv-tick { to { transform: translateX(-50%); } }
   @media (prefers-reduced-motion: reduce) {
     .mv-track.tick { overflow-x: auto; scrollbar-width: none; }
-    .mv-track.tick .mv-belt { animation: none; }
+    .mv-track.tick .mv-belt, .moved.fresh .nw, .moved.fresh .ar { animation: none; }
     .mv-track.tick .mv-run[aria-hidden] { display: none; }
   }
 
@@ -338,7 +343,8 @@ const store = {
 };
 const params = new URLSearchParams(location.search);
 let DATA, IX, RIVALS;
-const state = { team: null, week: null, open: new Set(), pulsed: new Set() };
+const state = { team: null, week: null, open: new Set(), pulsed: new Set(), finals: null };
+let FRESH = new Set();
 
 const rivalsFor = (tid) => store.get("rivals." + tid, null) || FanScore.defaultRivals(IX, RIVALS, tid);
 const weights = () => ({ ...FanScore.DEFAULT_WEIGHTS, ...store.get("weights", {}) });
@@ -536,7 +542,7 @@ function cardHTML(r, opts = {}) {
     ${hot}
     <div class="verdict" style="--pick:${tint}"><div class="root">${root}</div>${reason}</div>
     ${(live || res) && g.wp ? wpChart(g) : live ? factsHTML(r) : ""}
-    ${res ? movedHTML(g) : ""}
+    ${res ? afterHTML(r) : ""}
     <div class="cfoot">${why}${scored || r.mine || (r.stars || 0) >= 3 ? linksHTML(g) : ""}</div>
     ${whyBody}
   </article>`;
@@ -556,12 +562,13 @@ function compactHTML(r) {
   const when = g.state === "in" ? `<b style="color:var(--live)">${score}</b>`
     : fin ? `<b class="${r.result || ""}">${r.result === "won" ? "✓" : r.result === "lost" ? "✗" : ""} ${score}</b>` : esc(kickoff(g));
   return `<div class="rowg${fin ? " final" : ""}"><div class="l1"><span class="t">${when}</span>${r.rival ? nope(r.rival.id) : r.pick ? logo(r.pick, "sm") : ""}<span>${line}</span>${r.conflict ? '<span class="pill split" title="' + esc(r.split || "") + '">⇄</span>' : ""}<span class="s">${starsHTML(r.stars)}</span></div>
-    <div class="l2">${fin ? (r.result === "won" ? "Went your way. " : r.result === "lost" ? "Didn't go your way. " : "") : ""}${esc(r.reason || "")}</div>${fin ? movedHTML(g) : ""}</div>`;
+    <div class="l2">${fin ? (r.result === "won" ? "Went your way. " : r.result === "lost" ? "Didn't go your way. " : "") : ""}${esc(r.reason || "")}</div>${fin ? afterHTML(r) : ""}</div>`;
 }
 
 // What a finished game did to the title race, as Title Paths recorded it when the game went
-// final: "Title odds BYU ▲11 · HOU ▼20", each team moved by a point or more, biggest first,
-// your team underlined. A line too long for its row scrolls as a ticker (see tickers()).
+// final: "BYU ▲11 · HOU ▼20", each team moved by a point or more, biggest first, your team
+// underlined; null when nothing moved. afterHTML() puts it on its "Title odds" line, and a
+// line too long for its row scrolls as a ticker (see tickers()).
 function movedHTML(g) {
   const all = {};
   for (const c of Object.values(DATA.confOdds || {})) if (c.moved && c.moved[g.id]) Object.assign(all, c.moved[g.id]);
@@ -569,9 +576,34 @@ function movedHTML(g) {
     .map(([id, v]) => ({ id, d: Math.round((v[1] - v[0]) * 100) }))
     .filter((x) => x.d !== 0 && IX.teams.has(x.id))
     .sort((a, b) => Math.abs(b.d) - Math.abs(a.d) || b.d - a.d);
-  if (!rows.length) return "";
-  const run = rows.map(({ id, d }) => `<span class="mv${id === state.team ? " me" : ""}"><b>${esc(T(id).abbr || nm(id))}</b><span class="delta ${d > 0 ? "up" : "down"}"><span aria-hidden="true">${d > 0 ? "▲" : "▼"}${Math.abs(d)}</span><span class="vh"> ${d > 0 ? "up" : "down"} ${Math.abs(d)} point${Math.abs(d) === 1 ? "" : "s"}</span></span></span>`).join("");
-  return `<div class="moved"><span class="lbl">Title odds</span><div class="mv-track"><div class="mv-belt"><span class="mv-run">${run}</span></div></div></div>`;
+  if (!rows.length) return null;
+  return rows.map(({ id, d }) => `<span class="mv${id === state.team ? " me" : ""}"><b>${esc(T(id).abbr || nm(id))}</b><span class="delta ${d > 0 ? "up" : "down"}"><span aria-hidden="true">${d > 0 ? "▲" : "▼"}${Math.abs(d)}</span><span class="vh"> ${d > 0 ? "up" : "down"} ${Math.abs(d)} point${Math.abs(d) === 1 ? "" : "s"}</span></span></span>`).join("");
+}
+
+// What a finished game did beyond the title race: "Vs other leagues Big 12 21-14 → 22-14",
+// counted from the games, and "Est. rank CFP No. 14 → No. 12 · SOR No. 18 → No. 15", estimated
+// (see FanScore.aftermath). The new number is green when it helps you. A card shows two lines
+// at most: title odds, then its strongest other reason. A game that goes final while the page
+// is open rolls the new number in (FRESH; see render()).
+// A record as 7-3, a rank as No. 12, no rank as NR.
+const show = (v) => (Array.isArray(v) ? `${v[0]}-${v[1]}` : v ? `No. ${v}` : "NR");
+function afterHTML(r) {
+  const g = r.game, lines = [];
+  const odds = movedHTML(g);
+  if (odds) lines.push(["Title odds", odds]);
+  // Your own game leads with the ranking line. Someone else's game shows it only when the card
+  // is about rankings or the teams you've played, or the poll estimate moved: any game near you
+  // in SOR nudges you a place, which on its own is noise.
+  const at = (k) => { const i = r.signals.findIndex((s) => s.key === k); return i < 0 ? 99 : i; };
+  const rank = (k) => (k === "rank" ? (r.mine ? -1 : Math.min(at("rank"), at("resume"))) : at(k));
+  const recs = FanScore.aftermath(IX, fan(), g)
+    .filter((a) => a.key !== "rank" || r.mine || rank("rank") < 99 || a.items.some((it) => it.tag !== "SOR"))
+    .sort((a, b) => rank(a.key) - rank(b.key));
+  for (const a of recs.slice(0, 2 - lines.length)) {
+    lines.push([a.label, a.items.map((it) => `<span class="mv"><b>${esc(it.tag)}</b>${show(it.was)}<span class="ar" aria-hidden="true">→</span><span class="vh"> to </span><span class="nw delta ${it.good ? "up" : "down"}">${show(it.now)}</span></span>`).join("")]);
+  }
+  const fresh = FRESH.has(g.id) ? " fresh" : "";
+  return lines.map(([lbl, run]) => `<div class="moved${fresh}"><span class="lbl">${esc(lbl)}</span><div class="mv-track"><div class="mv-belt"><span class="mv-run">${run}</span></div></div></div>`).join("");
 }
 
 // A moved line too long for its row scrolls: the run twice over, sliding by one copy.
@@ -595,7 +627,7 @@ function finalHTML(r) {
   const res = r.mine ? (w === state.team ? "won" : "lost") : r.result;
   const mark = res === "won" ? "✓" : res === "lost" ? "✗" : "·";
   return `<div class="rowg final"><div class="l1"><span class="res ${res || ""}">${mark}</span>${logo(w, "sm")}<span><b>${rkName(w)}</b> beat ${rkName(l)} ${esc(ws)}-${esc(ls)}</span><span class="s">${starsHTML(r.stars)}</span></div>
-    <div class="l2">${res === "won" ? "Went your way" : res === "lost" ? "Didn't go your way" : ""}${r.reason ? (res ? ". " : "") + esc(r.reason) : ""}</div>${movedHTML(g)}</div>`;
+    <div class="l2">${res === "won" ? "Went your way" : res === "lost" ? "Didn't go your way" : ""}${r.reason ? (res ? ". " : "") + esc(r.reason) : ""}</div>${afterHTML(r)}</div>`;
 }
 
 // ---- page ----------------------------------------------------------------------------------
@@ -636,6 +668,10 @@ function render() {
   const hot = [...liveOf.entries()].filter(([, li]) => li && li.hot).sort((a, b) => b[1].score - a[1].score)[0];
   const pulseId = hot && !state.pulsed.has(hot[0]) ? hot[0] : null;
   if (pulseId) state.pulsed.add(pulseId);
+  // Games that went final since the last render roll their new records in, once.
+  const finals = DATA.games.filter((g) => g.done && !g.canceled).map((g) => g.id);
+  FRESH = state.finals ? new Set(finals.filter((id) => !state.finals.has(id))) : new Set();
+  state.finals = new Set([...(state.finals || []), ...finals]);
   const card = (r, opts = {}) => cardHTML(r, { ...opts, live: liveOf.get(r.game.id), pulse: r.game.id === pulseId });
 
   const mine = rows.find((r) => r.mine);

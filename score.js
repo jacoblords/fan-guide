@@ -638,13 +638,155 @@
     return { score, why, hot: !!why && (r.mine || (r.stars || 0) >= 2), going, upset, climbed };
   }
 
+  // ---- after the final: records before and after a finished game -------------------------
+
+  /** Games in the order they were played (kickoff, then id, so a tie still has an order). */
+  const before = (a, b) => a.date < b.date || (a.date === b.date && String(a.id) < String(b.id));
+
+  /** Which leagues a game is between, if it counts for league pride: two FBS teams from different
+   * conferences, independents left out except Notre Dame (as repSignal counts them). */
+  function crossLeague(ix, g) {
+    const H = ix.teams.get(g.home), A = ix.teams.get(g.away);
+    if (!H || !A || g.conf || !isFBS(ix, H.id) || !isFBS(ix, A.id) || H.conf === A.conf) return null;
+    const ok = (t) => t.conf !== "18" || t.id === "87";
+    return ok(H) && ok(A) ? [H.conf, A.conf] : null;
+  }
+
+  /** A conference's record against other leagues from the finished games played before g. */
+  function leagueBefore(ix, conf, g) {
+    const r = [0, 0];
+    for (const x of ix.data.games) {
+      if (!x.done || x.canceled || !x.winner || !before(x, g)) continue;
+      const c = crossLeague(ix, x);
+      if (!c || (c[0] !== conf && c[1] !== conf)) continue;
+      r[ix.teams.get(x.winner).conf === conf ? 0 : 1]++;
+    }
+    return r;
+  }
+
+  // ---- estimated SOR and poll rank -----------------------------------------------------
+  // Fitted to ESPN's weekly history for 2024 to 2026 (tools/backtest.py). ESPN's Strength of
+  // Record is the chance an average Top 25 team would have your record or better against your
+  // schedule, with each game's odds from FPI. With these settings the estimate lands within
+  // about 0.7 places of ESPN's SOR rank across its Top 25, and its weekly move within about
+  // 1.3 places, direction right nine times in ten.
+  const SOR = { top25: 18, hfa: 3.5, sd: 15, fcs: -25 };
+  // The poll a week on: last week's rank, plus 6 places a loss (10 to an unranked team), less one
+  // a win over a ranked team, blended with the SOR estimate (the committee leans on résumé more
+  // than AP voters do). Backtested within about 1.0 places of the CFP and 1.35 of the AP,
+  // direction right about nine times in ten.
+  const POLL = { loss: 6, badLoss: 4, bigWin: 1, sorAP: 0.05, sorCFP: 0.15, pool: 30 };
+
+  /** Chance of at least k wins from games won with chances ps. */
+  function atLeast(ps, k) {
+    let dist = [1];
+    for (const p of ps) {
+      const nd = new Array(dist.length + 1).fill(0);
+      dist.forEach((q, i) => { nd[i] += q * (1 - p); nd[i + 1] += q * p; });
+      dist = nd;
+    }
+    return dist.slice(k).reduce((a, b) => a + b, 0);
+  }
+
+  /** Ranks from values, smallest first (ties by id, so the order is stable). */
+  const ranksOf = (vals) => new Map([...vals].sort((a, b) => a[1] - b[1] || (a[0] < b[0] ? -1 : 1)).map(([t], i) => [t, i + 1]));
+
+  /** Estimated SOR ranks of every FBS team from the finished games keep() lets in. */
+  function sorRanks(ix, keep) {
+    const rec = new Map();
+    for (const t of ix.data.teams) if (isFBS(ix, t.id)) rec.set(t.id, { ps: [], w: 0 });
+    for (const g of ix.data.games) {
+      if (!g.done || g.canceled || !g.winner || !keep(g)) continue;
+      const site = g.neutral ? 0 : 1;
+      for (const [t, o, s] of [[g.home, g.away, site], [g.away, g.home, -site]]) {
+        const r = rec.get(t);
+        if (!r) continue;
+        const fo = (ix.teams.get(o) || {}).fpi;
+        r.ps.push(normCdf((SOR.top25 - (fo ?? SOR.fcs) + SOR.hfa * s) / SOR.sd));
+        if (g.winner === t) r.w++;
+      }
+    }
+    return ranksOf([...rec].map(([t, r]) => [t, atLeast(r.ps, r.w)]));
+  }
+
+  /** Estimated poll ranks after the finished games keep() lets in that came after the poll. */
+  function pollRanks(ix, keep, sor) {
+    const poll = ix.data.poll || {};
+    if (!poll.date || !poll.poll) return null;
+    const a = poll.poll === "CFP" ? POLL.sorCFP : POLL.sorAP;
+    const rk = (t) => (ix.teams.get(t) || {}).rank || null;
+    const key = new Map();
+    for (const t of ix.data.teams) {
+      const s = sor.get(t.id);
+      if (!rk(t.id) && !(s <= POLL.pool)) continue;
+      const prev = rk(t.id) || 26 + (s - 1) * 0.3;
+      key.set(t.id, (1 - a) * prev + a * s);
+    }
+    for (const g of ix.data.games) {
+      if (!g.done || g.canceled || !g.winner || g.date < poll.date || !keep(g)) continue;
+      const l = g.winner === g.home ? g.away : g.home;
+      if (key.has(l)) key.set(l, key.get(l) + POLL.loss + (rk(g.winner) ? 0 : POLL.badLoss));
+      if (key.has(g.winner) && rk(l)) key.set(g.winner, key.get(g.winner) - POLL.bigWin);
+    }
+    return ranksOf([...key]);
+  }
+
+  /** The fan's estimated poll and SOR ranks just before a finished game and just after it. */
+  function estimates(ix, fan, g) {
+    const memo = (ix.estMemo ||= new Map());
+    let m = memo.get(g.id);
+    if (!m) {
+      const pre = (x) => before(x, g), post = (x) => x === g || before(x, g);
+      const s0 = sorRanks(ix, pre), s1 = sorRanks(ix, post);
+      const counts = ix.data.poll && ix.data.poll.date && g.date >= ix.data.poll.date;
+      m = { s0, s1, p0: counts ? pollRanks(ix, pre, s0) : null, p1: counts ? pollRanks(ix, post, s1) : null };
+      memo.set(g.id, m);
+    }
+    const t = fan.team;
+    return { poll: (ix.data.poll || {}).poll, sor: [m.s0.get(t), m.s1.get(t)], rank: m.p0 ? [m.p0.get(t) || null, m.p1.get(t) || null] : null };
+  }
+
+  /**
+   * What a finished game did for the fan beyond the title race: [{ key, label, items: [{ tag,
+   * was, now, good }] }], a record as [wins, losses] and a rank as a number (null: unranked).
+   *   rep   the fan's league against other leagues, when the game was one of those
+   *   rank  the fan's estimated poll rank (games since the poll only) and SOR rank (once the fan
+   *         has played three games), when either moved and is near enough to matter (poll Top
+   *         25, SOR Top 40)
+   */
+  function aftermath(ix, fan, g) {
+    const X = ix.teams.get(fan.team);
+    if (!X || !g.done || g.canceled || !g.winner) return [];
+    const out = [];
+    const c = crossLeague(ix, g);
+    if (c && X.conf !== "18" && (c[0] === X.conf || c[1] === X.conf)) {
+      const was = leagueBefore(ix, X.conf, g), won = ix.teams.get(g.winner).conf === X.conf;
+      const cn = (ix.data.confs[X.conf] || {}).name || "Your league";
+      out.push({ key: "rep", label: "Vs other leagues", items: [{ tag: cn, was, now: won ? [was[0] + 1, was[1]] : [was[0], was[1] + 1], good: won }] });
+    }
+    if (isFBS(ix, fan.team)) {
+      const e = estimates(ix, fan, g), items = [];
+      const top = (r) => (r && r <= 25 ? r : null);
+      if (e.rank && top(e.rank[0]) !== top(e.rank[1])) {
+        const [w, n] = e.rank.map(top);
+        items.push({ tag: e.poll, was: w, now: n, good: (n || 26) < (w || 26) });
+      }
+      const [s0, s1] = e.sor;
+      // Early on SOR is mostly noise (every 1-0 team ties), so it waits for three games played.
+      const seen = (ix.played.get(fan.team) || []).filter((x) => before(x, g)).length;
+      if (seen >= 3 && s0 && s1 && s0 !== s1 && Math.min(s0, s1) <= 40) items.push({ tag: "SOR", was: s0, now: s1, good: s1 < s0 });
+      if (items.length) out.push({ key: "rank", label: "Est. rank", items });
+    }
+    return out;
+  }
+
   /** Default rivals from rivals.json (by abbreviation), as team ids. */
   function defaultRivals(ix, rivalsJson, tid) {
     const t = ix.teams.get(tid);
     return ((t && rivalsJson[t.abbr]) || []).map((a) => ix.byAbbr.get(a)).filter(Boolean);
   }
 
-  const api = { SIGNALS, DEFAULT_WEIGHTS, STAR_STEPS, lines, toStars, index, pHome, liveP, name, scoreGame, scoreWeek, headline, liveInterest, defaultRivals, pct };
+  const api = { SIGNALS, DEFAULT_WEIGHTS, STAR_STEPS, lines, toStars, index, pHome, liveP, name, scoreGame, scoreWeek, headline, liveInterest, defaultRivals, pct, aftermath };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.FanScore = api;
 })(typeof self !== "undefined" ? self : this);

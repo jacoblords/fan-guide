@@ -14,7 +14,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
       - name: Fetcher compiles
-        run: python3 -m py_compile fetch.py tools/fixture_from_titlepaths.py
+        run: python3 -m py_compile fetch.py tools/fixture_from_titlepaths.py tools/backtest.py
       - name: Data file is valid
         run: python3 -c "import json; d = json.load(open('data.json')); assert d['games'] and d['teams']"
       - name: live-ids.json builds
