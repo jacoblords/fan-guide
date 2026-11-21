@@ -747,12 +747,42 @@
   }
 
   /**
+   * The real moves a finished game of the fan's own made, once ESPN has published them:
+   * { poll: { kind, move: [was, now] }, sor: [was, now] }, each missing until it's out (or when it can't be told
+   * apart from another game of theirs). The poll is the one the page shows, from the release just
+   * before the game to the first one after, so it's the week's move; the fan's only game that
+   * week is the game. SOR snapshots are matched by games played, since ESPN fills in the current
+   * week's as games finish.
+   */
+  function actual(ix, fan, g) {
+    const t = fan.team, h = ix.data.history;
+    if (!h || (g.home !== t && g.away !== t)) return {};
+    const mine = ix.played.get(t) || [];
+    const out = {};
+    // Games before the committee's first Top 25 show the AP poll's move instead.
+    for (const kind of new Set([(ix.data.poll || {}).poll, "AP"])) {
+      const rel = h[kind] || [];
+      const b = rel.filter((r) => r.date && r.date <= g.date).pop();
+      const a = rel.find((r) => r.date && r.date > g.date);
+      if (!b || !a) continue;
+      if (!mine.some((x) => x !== g && x.date > b.date && x.date < a.date)) out.poll = { kind, move: [b.ranks[t] || null, a.ranks[t] || null] };
+      break;
+    }
+    const n = mine.filter((x) => before(x, g)).length;
+    const at = (k) => (h.SOR || []).filter((r) => r.ranks[t] && r.ranks[t][1] === k);
+    const s0 = at(n).pop(), s1 = at(n + 1)[0];
+    if (s0 && s1) out.sor = [s0.ranks[t][0], s1.ranks[t][0]];
+    return out;
+  }
+
+  /**
    * What a finished game did for the fan beyond the title race: [{ key, label, items: [{ tag,
    * was, now, good }] }], a record as [wins, losses] and a rank as a number (null: unranked).
    *   rep   the fan's league against other leagues, when the game was one of those
-   *   rank  the fan's estimated poll rank (games since the poll only) and SOR rank (once the fan
+   *   rank  the fan's poll rank (games since the poll only) and SOR rank (once the fan
    *         has played three games), when either moved and is near enough to matter (poll Top
-   *         25, SOR Top 40)
+   *         25, SOR Top 40). Estimated (est: true) until ESPN publishes the real move (see
+   *         actual); labeled "Est. rank" while every item is an estimate, else "Rank".
    */
   function aftermath(ix, fan, g) {
     const X = ix.teams.get(fan.team);
@@ -765,17 +795,18 @@
       out.push({ key: "rep", label: "Vs other leagues", items: [{ tag: cn, was, now: won ? [was[0] + 1, was[1]] : [was[0], was[1] + 1], good: won }] });
     }
     if (isFBS(ix, fan.team)) {
-      const e = estimates(ix, fan, g), items = [];
+      const e = estimates(ix, fan, g), real = actual(ix, fan, g), items = [];
       const top = (r) => (r && r <= 25 ? r : null);
-      if (e.rank && top(e.rank[0]) !== top(e.rank[1])) {
-        const [w, n] = e.rank.map(top);
-        items.push({ tag: e.poll, was: w, now: n, good: (n || 26) < (w || 26) });
+      const rank = real.poll ? real.poll.move : e.rank;
+      if (rank && top(rank[0]) !== top(rank[1])) {
+        const [w, n] = rank.map(top);
+        items.push({ tag: real.poll ? real.poll.kind : e.poll, was: w, now: n, good: (n || 26) < (w || 26), est: !real.poll });
       }
-      const [s0, s1] = e.sor;
+      const [s0, s1] = real.sor || e.sor;
       // Early on SOR is mostly noise (every 1-0 team ties), so it waits for three games played.
       const seen = (ix.played.get(fan.team) || []).filter((x) => before(x, g)).length;
-      if (seen >= 3 && s0 && s1 && s0 !== s1 && Math.min(s0, s1) <= 40) items.push({ tag: "SOR", was: s0, now: s1, good: s1 < s0 });
-      if (items.length) out.push({ key: "rank", label: "Est. rank", items });
+      if (seen >= 3 && s0 && s1 && s0 !== s1 && Math.min(s0, s1) <= 40) items.push({ tag: "SOR", was: s0, now: s1, good: s1 < s0, est: !real.sor });
+      if (items.length) out.push({ key: "rank", label: items.every((it) => it.est) ? "Est. rank" : "Rank", items });
     }
     return out;
   }

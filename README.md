@@ -41,7 +41,12 @@ groups, and finals; one column on phones.
 - **Also on your radar:** the rest, grouped by their strongest signal (title race, playoff
   ladder, rival watch, teams you've played, league pride) as collapsed one-line rows.
 - **Final:** finished games and whether they went your way, with Title Paths' "Title odds" line
-  (each team the result moved by a point or more, scrolling as a ticker when it's long).
+  (each team the result moved by a point or more, scrolling as a ticker when it's long), then
+  "Vs other leagues" (your conference's record against other leagues) and "Est. rank" (your
+  poll and SOR rank before and after). The rank line is estimated until the next poll and ESPN's
+  SOR come out; then your own team's games show the real move and read "Rank", with "est." on
+  whichever half is still waiting. Other teams' games keep the estimate, since a week's real
+  move can't be split between the games in it.
 
 A card shows the pick and its single strongest reason; **Why** opens a tug-of-war bar per signal
 (colored by the team it pulls toward), the numbers behind each, and the win odds. "⇄ Split" marks
@@ -72,7 +77,9 @@ game clock and both teams' odds at any moment you hover (or drag a finger) over 
 
 [`fetch.py`](fetch.py) writes `data.json`: every game with an FBS team this season, the whole regular
 season so the page can look ahead (ESPN scoreboard, one call a week), ESPN's matchup-predictor
-odds for this week's and next week's games (later weeks use FPI), the CFP Top 25 (or the AP poll before it starts), FPI, and Title Paths' conference odds.
+odds for this week's and next week's games (later weeks use FPI), the CFP Top 25 (or the AP poll before it starts), FPI, Title Paths' conference odds, and every weekly AP, CFP
+and SOR release so far (`history`; past weeks are carried over from the published file, so a
+run only asks ESPN about the last two).
 Visitors only read the static file. The fetcher identifies itself as `fan-guide (github actions; hourly-ish)`, the format ESPN accepts from Title Paths. [`.github/workflows/update.yml`](.github/workflows/update.yml)
 runs the tests, fetches and deploys to GitHub Pages.
 
