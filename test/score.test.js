@@ -360,7 +360,7 @@ test("no league line for an unfinished game or a conference game", () => {
 });
 
 // A league of eight, ranked by the CFP on Nov 3; each team has played three games by then.
-function rankFixture(extra = []) {
+function rankFixture(extra = [], history) {
   const ids = ["T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8"];
   const teams = ids.map((id, i) => ({ id, abbr: id, short: id, conf: "4", fpi: 20 - 3 * i, rank: i < 6 ? i + 1 : null }));
   const games = [];
@@ -371,9 +371,10 @@ function rankFixture(extra = []) {
     for (const [h, a] of pairs) games.push({ id: "p" + n++, week: 8, date: day(d), home: ids[h], away: ids[a], conf: true, done: true, winner: ids[h] });
   }
   games.push(...extra.map((g, k) => ({ id: "x" + k, week: 10, date: day(g.d), home: g.home, away: g.away, conf: true, done: true, winner: g.winner })));
-  return S.index({ season: 2026, week: 10, poll: { poll: "CFP", date: "2026-11-03T08:00Z" }, confs: { 4: { name: "Big 12", p4: true } }, teams, games });
+  return S.index({ season: 2026, week: 10, poll: { poll: "CFP", date: "2026-11-03T08:00Z" }, confs: { 4: { name: "Big 12", p4: true } }, teams, games, history });
 }
-const rankLine = (ix, team, gid) => (S.aftermath(ix, { team }, ix.data.games.find((g) => g.id === gid)).find((x) => x.key === "rank") || {}).items || [];
+const rankOut = (ix, team, gid) => S.aftermath(ix, { team }, ix.data.games.find((g) => g.id === gid)).find((x) => x.key === "rank") || {};
+const rankLine = (ix, team, gid) => rankOut(ix, team, gid).items || [];
 
 test("losing to an unranked team drops your estimated poll rank and SOR", () => {
   const ix = rankFixture([{ d: "11-07", home: "T7", away: "T3", winner: "T7" }]);
@@ -396,4 +397,38 @@ test("games before the poll don't move the poll estimate, and SOR waits for thre
   const ix = rankFixture([{ d: "11-01", home: "T8", away: "T4", winner: "T8" }]);
   assert.ok(!rankLine(ix, "T5", "x0").some((x) => x.tag === "CFP"));
   assert.deepStrictEqual(rankLine(ix, "T1", "p4"), []); // T1's second game
+});
+
+// ESPN's releases around T3's loss to T7 on Nov 7: CFP No. 3 on Nov 3, No. 9 on Nov 10; SOR 5th
+// after three games, 14th after four.
+const CFP_REL = [{ week: 10, date: "2026-11-03T08:00Z", ranks: { T3: 3, T5: 5 } }, { week: 11, date: "2026-11-10T08:00Z", ranks: { T3: 9, T5: 4 } }];
+const SOR_REL = [{ week: 9, ranks: { T3: [5, 3] } }, { week: 10, ranks: { T3: [14, 4] } }];
+
+test("once ESPN publishes, your own game shows the real move", () => {
+  const ix = rankFixture([{ d: "11-07", home: "T7", away: "T3", winner: "T7" }], { CFP: CFP_REL, SOR: SOR_REL });
+  const out = rankOut(ix, "T3", "x0");
+  assert.strictEqual(out.label, "Rank");
+  assert.deepStrictEqual(out.items.map((it) => [it.tag, it.was, it.now, it.good, it.est]), [["CFP", 3, 9, false, false], ["SOR", 5, 14, false, false]]);
+});
+
+test("the poll can be real while SOR is still an estimate", () => {
+  const ix = rankFixture([{ d: "11-07", home: "T7", away: "T3", winner: "T7" }], { CFP: CFP_REL, SOR: SOR_REL.slice(0, 1) });
+  const out = rankOut(ix, "T3", "x0");
+  assert.strictEqual(out.label, "Rank");
+  assert.deepStrictEqual(out.items.map((it) => [it.tag, it.est]), [["CFP", false], ["SOR", true]]);
+});
+
+test("someone else's game keeps the estimate, and so do two games of yours in one week", () => {
+  const other = rankFixture([{ d: "11-07", home: "T8", away: "T4", winner: "T8" }], { CFP: CFP_REL, SOR: SOR_REL });
+  assert.strictEqual(rankOut(other, "T5", "x0").label, "Est. rank");
+  const two = rankFixture([{ d: "11-05", home: "T3", away: "T8", winner: "T3" }, { d: "11-07", home: "T7", away: "T3", winner: "T7" }], { CFP: CFP_REL });
+  const cfp = rankLine(two, "T3", "x1").find((it) => it.tag === "CFP");
+  assert.strictEqual(cfp.est, true);
+});
+
+test("games before the committee's first ranking show the AP poll's real move", () => {
+  const AP = [{ week: 8, date: "2026-10-18T07:00Z", ranks: { T4: 4 } }, { week: 9, date: "2026-10-25T07:00Z", ranks: { T4: 7 } }];
+  const ix = rankFixture([], { AP, CFP: CFP_REL });
+  const ap = rankLine(ix, "T4", "p8"); // T4 loses at T1 on Oct 24
+  assert.deepStrictEqual(ap.find((it) => it.tag === "AP"), { tag: "AP", was: 4, now: 7, good: false, est: false });
 });

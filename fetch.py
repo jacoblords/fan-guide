@@ -255,6 +255,56 @@ def fetch_rankings(season):
     return {"poll": None, "date": None, "ranks": {}}
 
 
+def get_or_none(url):
+    """get(), but None for a release ESPN hasn't published (404)."""
+    try:
+        return get(url)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return None
+        raise
+
+
+def tid_of(ref):
+    return ref.split("/teams/")[1].split("?")[0]
+
+
+POLLS = {"AP": 1, "CFP": 21}
+
+
+def fetch_history(season, week, last, prev):
+    """Every weekly release so far, so a finished game can show the real move it made:
+      AP, CFP  [{week, date, ranks: {id: rank}}]: the Top 25 released before that week's games
+      SOR      [{week, ranks: {id: [rank, games played]}}]: ESPN's snapshot after that week's
+               games (it fills in as they're played; the page matches it by games played)
+    Releases older than last week are taken from the previous run's data when it has them."""
+    out = {}
+    for kind, num in POLLS.items():
+        keep = {r["week"]: r for r in prev.get(kind, []) if r["week"] < week - 1}
+        def one(w):
+            # Week 1's poll is the preseason one, which ESPN files under the preseason.
+            d = get_or_none(f"{CORE}/seasons/{season}/types/{1 if w == 1 else 2}/weeks/{w}/rankings/{num}")
+            if not d or not d.get("ranks"):
+                return None
+            return {"week": w, "date": d.get("date"),
+                    "ranks": {tid_of(x["team"]["$ref"]): int(x["current"]) for x in d["ranks"]}}
+        need = [w for w in range(1, min(week + 1, last + 1) + 1) if w not in keep]
+        got = [r for r in pmap(one, need) if r]
+        out[kind] = sorted([*keep.values(), *got], key=lambda r: r["week"])
+    keep = {r["week"]: r for r in prev.get("SOR", []) if r["week"] < week - 1}
+    def snap(w):
+        d = get_or_none(f"{CORE}/seasons/{season}/types/2/weeks/{w}/powerindex?limit=300")
+        ranks = {}
+        for it in (d or {}).get("items") or []:
+            p = {x["name"]: x.get("value") for x in it["predictives"]}
+            if p.get("accomplishmentrank") is not None and p.get("numwins") is not None:
+                ranks[tid_of(it["team"]["$ref"])] = [int(p["accomplishmentrank"]), int(p["numwins"] + (p.get("numlosses") or 0))]
+        return {"week": w, "ranks": ranks} if ranks else None
+    got = [r for r in pmap(snap, [w for w in range(1, week + 1) if w not in keep]) if r]
+    out["SOR"] = sorted([*keep.values(), *got], key=lambda r: r["week"])
+    return out
+
+
 def fetch_title_paths():
     """Title Paths' conference odds, by ESPN conference id:
     {"teams": {id: {"p": title-game odds, "first": odds of finishing first, "clinched", "eliminated"}},
@@ -348,11 +398,13 @@ def main():
     weeks = list(range(1, last + 1))  # the whole regular season, so the page can look ahead
     games = [g for gs in pmap(lambda w: fetch_week(season, w, teams), weeks) for g in gs]
 
-    prev_games = {}
+    prev_games, prev_hist = {}, {}
     if args.prev:
         try:
             with open(args.prev) as f:
-                prev_games = {g["id"]: g for g in json.load(f).get("games", [])}
+                prev = json.load(f)
+            prev_games = {g["id"]: g for g in prev.get("games", [])}
+            prev_hist = prev.get("history") or {}
         except (OSError, ValueError) as e:
             print(f"  previous data unreadable: {e}", file=sys.stderr)
 
@@ -381,6 +433,11 @@ def main():
     fpi, sor = fetch_fpi(season)
     rankings = fetch_rankings(season)
     conf_odds = fetch_title_paths()
+    try:
+        history = fetch_history(season, week, last, prev_hist)
+    except Exception as e:  # the real moves are extra; the page falls back to its estimates
+        print(f"  ranking history failed, keeping the last: {e}", file=sys.stderr)
+        history = prev_hist
 
     rec = records(games)
     for tid, t in teams.items():
@@ -399,6 +456,7 @@ def main():
         "teams": sorted(teams.values(), key=lambda t: t["name"] or ""),
         "games": sorted(games, key=lambda g: (g["date"], g["id"])),
         "confOdds": conf_odds,
+        "history": history,
         "liveUrl": live_url(),
     }
     with open(args.out, "w") as f:

@@ -246,6 +246,7 @@
   .mv-belt { display: inline-flex; white-space: nowrap; }
   .mv-run { display: inline-flex; gap: 12px; padding-right: 12px; }
   .mv b { font-family: var(--display); font-weight: 700; letter-spacing: 0.04em; margin-right: 3px; color: var(--ink); }
+  .mv .est { font-style: normal; font-weight: 500; font-size: 0.85em; letter-spacing: 0; color: var(--muted); }
   .mv.me b { text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 3px; }
   .delta { font-weight: 600; } .delta.up { color: var(--good); } .delta.down { color: var(--bad); }
   .mv .ar { color: var(--muted); margin: 0 3px; }
@@ -582,7 +583,8 @@ function movedHTML(g) {
 
 // What a finished game did beyond the title race: "Vs other leagues Big 12 21-14 → 22-14",
 // counted from the games, and "Est. rank CFP No. 14 → No. 12 · SOR No. 18 → No. 15", estimated
-// (see FanScore.aftermath). The new number is green when it helps you. A card shows two lines
+// until the next poll and ESPN's SOR come out, then the real move on your own team's games
+// ("Rank", with "est." on whichever is still an estimate; see FanScore.aftermath). The new number is green when it helps you. A card shows two lines
 // at most: title odds, then its strongest other reason. A game that goes final while the page
 // is open rolls the new number in (FRESH; see render()).
 // A record as 7-3, a rank as No. 12, no rank as NR.
@@ -600,7 +602,7 @@ function afterHTML(r) {
     .filter((a) => a.key !== "rank" || r.mine || rank("rank") < 99 || a.items.some((it) => it.tag !== "SOR"))
     .sort((a, b) => rank(a.key) - rank(b.key));
   for (const a of recs.slice(0, 2 - lines.length)) {
-    lines.push([a.label, a.items.map((it) => `<span class="mv"><b>${esc(it.tag)}</b>${show(it.was)}<span class="ar" aria-hidden="true">→</span><span class="vh"> to </span><span class="nw delta ${it.good ? "up" : "down"}">${show(it.now)}</span></span>`).join("")]);
+    lines.push([a.label, a.items.map((it) => `<span class="mv"><b>${esc(it.tag)}${it.est && a.label === "Rank" ? ' <i class="est">est.</i>' : ""}</b>${show(it.was)}<span class="ar" aria-hidden="true">→</span><span class="vh"> to </span><span class="nw delta ${it.good ? "up" : "down"}">${show(it.now)}</span></span>`).join("")]);
   }
   const fresh = FRESH.has(g.id) ? " fresh" : "";
   return lines.map(([lbl, run]) => `<div class="moved${fresh}"><span class="lbl">${esc(lbl)}</span><div class="mv-track"><div class="mv-belt"><span class="mv-run">${run}</span></div></div></div>`).join("");
@@ -911,7 +913,7 @@ async function boot(opts = {}) {
   const updated = new Date(d.fetchedAt.replace("Z", ":00Z")).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" });
   $("#foot").innerHTML = `${d.fixture ? '<span class="badge">test data</span>' : ""}${demo ? '<span class="badge">demo scores</span>' : ""}
     Updated ${esc(updated)}. Win odds from ESPN, conference odds from <a href="https://titlepaths.com/">Title Paths</a>, rankings from the ${esc(d.poll.poll || "polls")}.
-    Ranking and record effects are estimates.
+    Ranking effects are estimates until the next poll and ESPN's SOR update.
     ${demoAllowed ? `<div style="margin-top:8px"><button class="btn" id="demoToggle">${demo ? "Back to the real schedule" : "Preview game day (fake scores)"}</button></div>` : ""}`;
   if (opts.refresh) { redraw(); return; }
   setTeam(team);
