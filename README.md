@@ -39,7 +39,10 @@ groups, and finals; one column on phones.
 - **Your game**, then **Must-watch**: up to five games of three stars or more, no more than two
   from any one signal, in kickoff order.
 - **Also on your radar:** the rest, grouped by their strongest signal (title race, playoff
-  ladder, rival watch, teams you've played, league pride) as collapsed one-line rows.
+  ladder, rival watch, teams you've played, league pride) as collapsed one-line rows. Chalk (a
+  ranked favorite against an unranked team) folds under "Show N chalk games"; an upset under way
+  or finished brings it out, with its win-probability chart under the row. A big upset (the
+  winner under 25% before kickoff) gets an amber edge and an "Upset" tag, on a row or a card.
 - **Final:** finished games and whether they went your way, with Title Paths' "Title odds" line
   (each team the result moved by a point or more, scrolling as a ticker when it's long), then
   "Vs other leagues" (your conference's record against other leagues) and "Est. rank" (your

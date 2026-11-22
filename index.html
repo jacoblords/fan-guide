@@ -236,6 +236,12 @@
   .rowg .l1 .s { margin-left: auto; }
   .rowg .rk { color: var(--muted); font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; }
   .rowg .l2 { color: var(--muted); font-size: 13px; padding-left: 90px; }
+  .rowg .wp { padding: 6px 0 0 90px; max-width: 420px; }
+  /* A big upset: an amber edge and tag, so the unusual result reads as one at a glance. */
+  .rowg.upset { box-shadow: inset 3px 0 0 var(--warn); }
+  .card.upset { border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); }
+  .upset-tag { color: var(--warn); font-weight: 650; }
+  .pill.upset { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); }
   .final .l1 .res { font-weight: 650; }
   .final .won { color: var(--good); } .final .lost { color: var(--bad); }
   /* Title odds moved by a finished game, as on Title Paths' gameday */
@@ -280,7 +286,7 @@
     .brand span { display: none; }
     .stake { font-size: 17px; }
     .trow .rec { display: none; }
-    .rowg .l2, .moved { padding-left: 0; }
+    .rowg .l2, .moved, .rowg .wp { padding-left: 0; }
   }
 </style>
 </head>
@@ -435,8 +441,12 @@ document.addEventListener("pointerdown", wpHover);
 document.addEventListener("pointerout", (e) => { if (e.target.closest && e.target.closest(".wp-plot") && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest(".wp-plot") === e.target.closest(".wp-plot"))) wpLeave(e); });
 
 function wpChart(g) {
-  const pts = (g.wp && g.wp.pts) || [];
+  let pts = (g.wp && g.wp.pts) || [];
   if (pts.length < 2) return "";
+  // ESPN's last play-by-play point can stop short of the result (Washington ended a 27-24 win at
+  // 51%), so a final game's line ends at its winner.
+  const end = g.done && !g.canceled && g.winner ? (g.winner === g.home ? 1000 : 0) : null;
+  if (end != null && pts[pts.length - 1][1] !== end) pts = [...pts, [pts[pts.length - 1][0], end]];
   const W = 300, H = 80, mid = H / 2, tMax = Math.max(3600, pts[pts.length - 1][0]);
   const X = (t) => ((t / tMax) * W).toFixed(1), Y = (v) => ((Math.min(Math.max(v, 0), 1000) / 1000) * H).toFixed(1);
   const line = pts.map(([t, v]) => `${X(t)},${Y(v)}`).join(" ");
@@ -536,9 +546,10 @@ function cardHTML(r, opts = {}) {
     ? `<div class="whybody"${open ? "" : " hidden"}>${r.split ? `<div class="splitline">${esc(r.split)}</div>` : ""}${tugHTML(r)}</div>` : "";
   const tint = r.pick ? esc(T(r.pick).color || "#888") : "var(--line)";
   const biggest = opts.biggest ? `<span class="pill big">Biggest</span>` : "";
+  const upset = r.upset ? `<span class="pill upset" title="${upsetLine(r.upset)}">Upset</span>` : "";
   const climb = li && li.climbed >= 1 ? `<span class="climb" title="Up from ${esc(r.preStars)} stars before kickoff">▲ was ${esc(r.preStars)}</span> ` : "";
-  return `<article class="card ${r.mine ? "mine" : ""} ${live ? "live" : ""} ${opts.pulse ? "hot" : ""}">
-    <div class="meta"><span class="left">${head} ${biggest}${going}${split}</span><span class="right">${climb}${starsHTML(r.stars)}</span></div>
+  return `<article class="card ${r.mine ? "mine" : ""} ${live ? "live" : ""} ${opts.pulse ? "hot" : ""} ${r.upset ? "upset" : ""}">
+    <div class="meta"><span class="left">${head} ${biggest}${upset}${going}${split}</span><span class="right">${climb}${starsHTML(r.stars)}</span></div>
     ${teamsHTML(r)}
     ${hot}
     <div class="verdict" style="--pick:${tint}"><div class="root">${root}</div>${reason}</div>
@@ -551,6 +562,9 @@ function cardHTML(r, opts = {}) {
 
 const rkName = (id) => { const t = T(id); return (t.rank ? `<span class="rk">${esc(t.rank)}</span> ` : "") + esc(nm(id)); };
 
+// "Upset: Washington won as a 21% underdog", for a finished game the winner was given under 25%.
+const upsetLine = (u) => `${esc(nm(u.winner))} won as a ${FanScore.pct(u.pre)} underdog`;
+
 function compactHTML(r) {
   const g = r.game;
   const other = r.pick === g.home ? g.away : g.home;
@@ -562,8 +576,11 @@ function compactHTML(r) {
   const score = `${esc(T(g.away).abbr || "")} ${esc(g.awayScore)}-${esc(g.homeScore)} ${esc(T(g.home).abbr || "")}`;
   const when = g.state === "in" ? `<b style="color:var(--live)">${score}</b>`
     : fin ? `<b class="${r.result || ""}">${r.result === "won" ? "✓" : r.result === "lost" ? "✗" : ""} ${score}</b>` : esc(kickoff(g));
-  return `<div class="rowg${fin ? " final" : ""}"><div class="l1"><span class="t">${when}</span>${r.rival ? nope(r.rival.id) : r.pick ? logo(r.pick, "sm") : ""}<span>${line}</span>${r.conflict ? '<span class="pill split" title="' + esc(r.split || "") + '">⇄</span>' : ""}<span class="s">${starsHTML(r.stars)}</span></div>
-    <div class="l2">${fin ? (r.result === "won" ? "Went your way. " : r.result === "lost" ? "Didn't go your way. " : "") : ""}${esc(r.reason || "")}</div>${fin ? afterHTML(r) : ""}</div>`;
+  // A game that came out of the chalk fold shows how it got there.
+  const chart = r.unfolded && g.wp && (g.state === "in" || fin) ? wpChart(g) : "";
+  const upset = r.upset ? `<b class="upset-tag">Upset:</b> ${upsetLine(r.upset)}. ` : "";
+  return `<div class="rowg${fin ? " final" : ""}${r.upset ? " upset" : ""}"><div class="l1"><span class="t">${when}</span>${r.rival ? nope(r.rival.id) : r.pick ? logo(r.pick, "sm") : ""}<span>${line}</span>${r.conflict ? '<span class="pill split" title="' + esc(r.split || "") + '">⇄</span>' : ""}<span class="s">${starsHTML(r.stars)}</span></div>
+    <div class="l2">${upset}${fin ? (r.result === "won" ? "Went your way. " : r.result === "lost" ? "Didn't go your way. " : "") : ""}${esc(r.reason || "")}</div>${chart}${fin ? afterHTML(r) : ""}</div>`;
 }
 
 // What a finished game did to the title race, as Title Paths recorded it when the game went
@@ -699,7 +716,8 @@ function render() {
     const list = groups[k].sort((a, b) => a.game.date.localeCompare(b.game.date));
     const sig = FanScore.SIGNALS.find((s) => s.key === k);
     const open = !state.open.has("closed:" + k);
-    // Chalk (a ranked favorite against an unranked team) folds away; an upset, under way or finished, unfolds it.
+    // Chalk (a ranked favorite against an unranked team) folds away; an upset, under way or finished,
+    // unfolds it, and the row then carries its win-probability chart.
     const shown = list.filter((r) => !r.routine), routine = list.filter((r) => r.routine);
     const count = shown.length ? `${shown.length} game${shown.length > 1 ? "s" : ""}` : "nothing close this week";
     const quiet = routine.length

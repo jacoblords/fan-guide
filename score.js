@@ -498,6 +498,10 @@
     // so the line under "Root for X" never argues against X; a disagreeing signal shows as Split.
     const lead = (pick && signals.find((s) => s.rel > 0)) || signals[0];
     const group = mine ? "mine" : lead ? lead.key : null;
+    // Chalk folds away; a game that was chalk before kickoff but isn't now came out of the fold.
+    const routine = group === "rank" ? routineLadder(ix, fan, g, p, pNow) : group === "resume" ? routineResume(ix, g, p, pNow, pick) : false;
+    const before = { ...g, state: "pre", done: false, winner: null }; // the game as it stood at kickoff
+    const routinePre = group === "rank" ? routineLadder(ix, fan, before, p, p) : group === "resume" ? routineResume(ix, before, p, p, pick) : false;
     return {
       game: g, p, pNow, pick, mine, total, priority,
       stars: mine ? null : Math.round(toStars(priority, OVERALL_STEPS) * 2) / 2,
@@ -505,8 +509,9 @@
       signals, conflict, split, spectacle: spec,
       group,
       rival: rivalOf(signals, pick, mine),
-      routine: group === "rank" ? routineLadder(ix, fan, g, p, pNow) : group === "resume" ? routineResume(ix, g, p, pNow, pick) : false,
-      routinePre: group === "rank" ? routineLadder(ix, fan, { ...g, state: "pre" }, p, p) : group === "resume" ? routineResume(ix, { ...g, state: "pre" }, p, p, pick) : false,
+      routine, routinePre,
+      unfolded: routinePre && !routine,
+      upset: bigUpset(g, p),
       reason: lead ? lead.short : null,
       heart: signals.some((s) => s.kind === "heart"),
       result,
@@ -521,6 +526,15 @@
     if (s.playing && s.playing !== pick) return { id: s.playing, playing: true };
     if (!s.playing && signals[0] === s) return { id: s.rivals[0], playing: false };
     return null;
+  }
+
+  /** A finished game the winner was given under 25% to win before kickoff: {winner, pre}, else
+   * null. Not every underdog win: a 40% team winning is a coin landing on its other side. */
+  const BIG_UPSET = 0.25;
+  function bigUpset(g, p) {
+    if (!g.done || g.canceled || !g.winner) return null;
+    const pre = g.winner === g.home ? p : 1 - p;
+    return pre < BIG_UPSET ? { winner: g.winner, pre } : null;
   }
 
   /** A playoff-ladder game that's business as usual: a ranked team expected to beat an unranked
