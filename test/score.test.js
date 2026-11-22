@@ -245,6 +245,28 @@ test("ladder: a ranked favorite against an unranked team is routine, unless an u
   assert.strictEqual(S.scoreGame(ix, fan(ix), chalk).routine, true, "E won as expected: still chalk");
 });
 
+test("a game that was chalk before kickoff but isn't now came out of the fold", () => {
+  const ix = ladderFixture();
+  const g6 = ix.data.games.find((g) => g.id === "g6"); // unranked D hosts No. 9 E, which is 80% to win
+  assert.strictEqual(S.scoreGame(ix, fan(ix), g6).unfolded, false, "still chalk");
+  const live = { ...g6, state: "in", period: 4, clock: "5:00", homeScore: 24, awayScore: 17 };
+  assert.strictEqual(S.scoreGame(ix, fan(ix), live).unfolded, true, "an upset under way");
+  const won = { ...g6, state: "post", done: true, winner: "D", homeScore: 27, awayScore: 24 };
+  assert.strictEqual(S.scoreGame(ix, fan(ix), won).unfolded, true, "an upset that happened");
+});
+
+test("a big upset is a winner given under 25% before kickoff, and only once it's final", () => {
+  const ix = ladderFixture();
+  const g6 = ix.data.games.find((g) => g.id === "g6");
+  const done = (winner) => ({ ...g6, state: "post", done: true, winner, homeScore: 1, awayScore: 0 });
+  const r = S.scoreGame(ix, fan(ix), done("D"));
+  assert.strictEqual(r.upset.winner, "D");
+  assert.ok(Math.abs(r.upset.pre - r.p) < 1e-9, "D is home: its odds are pHome");
+  assert.strictEqual(S.scoreGame(ix, fan(ix), done("E")).upset, null, "the favorite won");
+  assert.strictEqual(S.scoreGame(ix, fan(ix), { ...g6, state: "in", homeScore: 28, awayScore: 0 }).upset, null, "not final yet");
+  assert.strictEqual(S.scoreGame(ix, fan(ix), { ...done("D"), pHome: 0.3 }).upset, null, "30% winning isn't a big upset");
+});
+
 test("ladder: two ranked teams near you meeting is not routine", () => {
   const ix = ladderFixture();
   ix.data.games.push({ id: "g7", week: 12, date: "2026-11-21T23:00Z", home: "C", away: "E", conf: true, done: false, pHome: 0.45 });
