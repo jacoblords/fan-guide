@@ -526,29 +526,32 @@
   /** A playoff-ladder game that's business as usual: a ranked team expected to beat an unranked
    * one. It only matters when two ranked teams near you meet (a win can lift one past you, a loss
    * drop one below you), or when an upset is under way (the pre-game underdog is at 40% or
-   * better live). Ranks within 6 spots count as near; an unranked fan sits at 26. */
+   * better live) or has happened. Ranks within 6 spots count as near; an unranked fan sits at 26. */
   const LADDER_NEAR = 6;
+  /** An upset under way (the pre-game underdog at 40% or better live) or finished (it won). */
+  function upsetShowing(g, dog, pDogNow) {
+    if (g.state === "in") return pDogNow >= 0.4;
+    return !!(g.done && !g.canceled && g.winner === dog);
+  }
   function routineLadder(ix, fan, g, p, pNow) {
     const X = ix.teams.get(fan.team);
     const rX = (X && X.rank) || 26;
     const rH = (ix.teams.get(g.home) || {}).rank, rA = (ix.teams.get(g.away) || {}).rank;
     const clash = rH && rA && [rH, rA].some((r) => Math.abs(r - rX) <= LADDER_NEAR);
     const dogHome = p < 0.5;
-    const upsetLive = g.state === "in" && (dogHome ? pNow : 1 - pNow) >= 0.4;
-    return !clash && !upsetLive;
+    return !clash && !upsetShowing(g, dogHome ? g.home : g.away, dogHome ? pNow : 1 - pNow);
   }
 
   /** A Teams-you've-played game that's chalk: the team you want to win is a heavy favorite (75%
    * or better) against an unranked opponent, so the expected result does little for your record.
-   * Shown anyway when it faces a ranked team or an upset is under way. */
+   * Shown anyway when it faces a ranked team or an upset is under way or has happened. */
   const CHALK_FAVORITE = 0.75;
   function routineResume(ix, g, p, pNow, pick) {
     if (!pick) return false;
     const opp = pick === g.home ? g.away : g.home;
     if ((ix.teams.get(opp) || {}).rank) return false;
     const pPick = pick === g.home ? p : 1 - p;
-    const upsetLive = g.state === "in" && (pick === g.home ? 1 - pNow : pNow) >= 0.4;
-    return pPick >= CHALK_FAVORITE && !upsetLive;
+    return pPick >= CHALK_FAVORITE && !upsetShowing(g, opp, pick === g.home ? 1 - pNow : pNow);
   }
 
   /** Every game of `week`, scored for `fan` = {team, rivals: [ids], weights?, rivalsOf?}. */

@@ -699,7 +699,7 @@ function render() {
     const list = groups[k].sort((a, b) => a.game.date.localeCompare(b.game.date));
     const sig = FanScore.SIGNALS.find((s) => s.key === k);
     const open = !state.open.has("closed:" + k);
-    // Chalk (a ranked favorite against an unranked team) folds away; an upset under way unfolds it.
+    // Chalk (a ranked favorite against an unranked team) folds away; an upset, under way or finished, unfolds it.
     const shown = list.filter((r) => !r.routine), routine = list.filter((r) => r.routine);
     const count = shown.length ? `${shown.length} game${shown.length > 1 ? "s" : ""}` : "nothing close this week";
     const quiet = routine.length

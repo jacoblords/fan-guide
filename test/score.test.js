@@ -239,6 +239,10 @@ test("ladder: a ranked favorite against an unranked team is routine, unless an u
   assert.strictEqual(S.scoreGame(ix, fan(ix), g6).routine, true);
   const live = { ...g6, state: "in", period: 4, clock: "5:00", homeScore: 24, awayScore: 17 };
   assert.strictEqual(S.scoreGame(ix, fan(ix), live).routine, false, "D leads late: worth watching");
+  const upset = { ...g6, state: "post", done: true, winner: "D", homeScore: 27, awayScore: 24 };
+  assert.strictEqual(S.scoreGame(ix, fan(ix), upset).routine, false, "D won: the upset stays out of the chalk fold");
+  const chalk = { ...g6, state: "post", done: true, winner: "E", homeScore: 10, awayScore: 31 };
+  assert.strictEqual(S.scoreGame(ix, fan(ix), chalk).routine, true, "E won as expected: still chalk");
 });
 
 test("ladder: two ranked teams near you meeting is not routine", () => {
@@ -284,6 +288,10 @@ test("teams you've played: a heavy favorite against an unranked team is chalk", 
   assert.strictEqual(r.routine, true);
   const live = { ...g, state: "in", period: 4, clock: "4:00", homeScore: 24, awayScore: 20 };
   assert.strictEqual(S.scoreGame(S.index(ix.data), fan(ix), live).routine, false, "upset under way");
+  const upset = { ...g, state: "post", done: true, winner: "A", homeScore: 24, awayScore: 20 };
+  assert.strictEqual(S.scoreGame(S.index(ix.data), fan(ix), upset).routine, false, "upset happened");
+  const chalk = { ...g, state: "post", done: true, winner: "B", homeScore: 10, awayScore: 31 };
+  assert.strictEqual(S.scoreGame(S.index(ix.data), fan(ix), chalk).routine, true, "favorite won: still chalk");
   Object.assign(g, { pHome: 0.45 });
   assert.strictEqual(S.scoreGame(S.index(ix.data), fan(ix), g).routine, false, "a real game");
 });
