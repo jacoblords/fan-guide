@@ -869,6 +869,9 @@ function natRowHTML(r) {
     const w = g.winner, l = w === g.home ? g.away : g.home;
     const ws = w === g.home ? g.homeScore : g.awayScore, ls = w === g.home ? g.awayScore : g.homeScore;
     l1 = `<span class="t">Final</span>${logo(w, "sm")}<span><b>${rkLinked(w)}</b> beat ${rkLinked(l)}${ws != null ? ` ${esc(ws)}-${esc(ls)}` : ""}</span>`;
+  } else if (g.state === "in") {
+    // Under way: the score in red where the kickoff time would be.
+    l1 = `<span class="t"><b style="color:var(--live)">${esc(T(g.away).abbr || "")} ${esc(g.awayScore)}-${esc(g.homeScore)} ${esc(T(g.home).abbr || "")}</b></span><span>${matchup(g, true)}</span>`;
   } else l1 = `<span class="t">${esc(kickoff(g))}</span><span>${matchup(g, true)}</span>`;
   const upset = r.upset ? `<b class="upset-tag">Upset:</b> ${upsetLine(r.upset)}. ` : "";
   const odds = fin ? movedHTML(g) : null;
@@ -926,7 +929,13 @@ function renderAround() {
     <p class="talk">Ranked by what each game can change (the title races and the playoff lines), weighted toward close games and surprises. Tap a team to see the games that matter to them.</p>
     ${tally ? `<span class="tally">${tally}</span>` : ""}`;
 
-  $("#live").innerHTML = live.length ? `<h2><span class="dot"></span>Live now</h2><div class="cards">${live.map((r) => natCardHTML(r, liveOf.get(r.game.id))).join("")}</div>` : "";
+  // Live games that matter get cards; the rest go on one quiet list underneath, so a game with
+  // little at stake doesn't take a card's room. An upset under way, or a close game late,
+  // always gets a card.
+  const featured = (r) => { const li = liveOf.get(r.game.id) || {}; return r.stars >= 2 || li.upset || !!li.why; };
+  const liveCards = live.filter(featured), liveRows = live.filter((r) => !featured(r));
+  const alsoOn = liveRows.length ? `<div class="groupgrid" style="margin-top:var(--gap)"><details class="group" data-g="alsoon"${state.open.has("closed:alsoon") ? "" : " open"}><summary><span class="gname">Also on now</span><span class="tagline">Little riding on these · ${liveRows.length} game${liveRows.length > 1 ? "s" : ""}</span></summary>${liveRows.map(natRowHTML).join("")}</details></div>` : "";
+  $("#live").innerHTML = live.length ? `<h2><span class="dot"></span>Live now</h2>${liveCards.length ? `<div class="cards">${liveCards.map((r) => natCardHTML(r, liveOf.get(r.game.id))).join("")}</div>` : ""}${alsoOn}` : "";
   const mustSorted = [...must].sort((a, b) => a.game.date.localeCompare(b.game.date));
   $("#must").innerHTML = mustSorted.length ? `<h2>Must-watch</h2><div class="cards">${mustSorted.map((r) => natCardHTML(r)).join("")}</div>` : "";
   $("#groups").innerHTML = rest.length ? `<h2>More games</h2><div class="groupgrid">${rowsGroup("ahead", "Still to play", "The rest, most interesting first", rest)}</div>` : "";
