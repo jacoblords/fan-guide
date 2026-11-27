@@ -293,6 +293,8 @@
   a.tlink:hover { text-decoration: underline; text-underline-offset: 2px; }
   .verdict.nat { --pick: var(--accent); }
   .verdict.nat .lead { font-size: 14.5px; font-weight: 600; }
+  .verdict.nat.quiet { border-left-color: transparent; background: none; padding: 0; }
+  .verdict.nat.quiet .lead { font-size: 13px; font-weight: 400; color: var(--muted); }
   .rowg .whybtn { margin-left: 6px; font-size: 12.5px; }
   .rowg .whybody { padding: 6px 0 2px 90px; }
   .abt { display: grid; gap: 3px; font-size: 12.5px; color: var(--muted); margin-bottom: 8px; }
@@ -796,7 +798,9 @@ const matchup = (g, links) => `${teamLink(g.away, rkProse(g.away))} ${g.neutral 
 const rkLinked = (id, links = true) => (links ? teamLink(id, rkName(id)) : rkName(id));
 const favLine = (g, p) => { const [t, q] = p >= 0.5 ? [g.home, p] : [g.away, 1 - p]; return `${esc(nm(t))} ${FanScore.pct(q)} to win`; };
 // The card's one line: the bigger stake, else the upset, else just the odds.
-const natLead = (r) => (r.reason ? esc(r.reason) + "." : r.upset ? upsetLine(r.upset) + "." : `Not much riding on it for the rest of the country. ${favLine(r.game, r.p)}.`);
+// A game with nothing at stake says so in three words, quietly (its odds are on the card already).
+const natQuiet = (r) => !r.reason && !r.upset;
+const natLead = (r) => (r.reason ? esc(r.reason) + "." : r.upset ? upsetLine(r.upset) + "." : "Little at stake.");
 
 // Why, for a reader who may not know either team: who they are, then each stake with its numbers,
 // then why the game sits where it does (stakes times drama).
@@ -850,7 +854,7 @@ function natCardHTML(r, li) {
     <div class="meta"><span class="left">${head} ${upset}</span><span class="right">${starsHTML(r.stars, NAT_TIP)}</span></div>
     ${teamsHTML(r, true)}
     ${hot}
-    <div class="verdict nat"><div class="lead">${natLead(r)}</div></div>
+    <div class="verdict nat${natQuiet(r) ? " quiet" : ""}"><div class="lead">${natLead(r)}</div></div>
     ${scored && g.wp ? wpChart(g) : live ? factsHTML(r) : ""}
     ${odds ? `<div class="moved"><span class="lbl">Title odds</span><div class="mv-track"><div class="mv-belt"><span class="mv-run">${odds}</span></div></div></div>` : ""}
     <div class="cfoot">${why}${linksHTML(g)}</div>
@@ -910,7 +914,10 @@ function renderAround() {
   const big = ahead[0] && ahead[0].preStars >= 2 ? ahead[0] : null;
   let pull;
   if (big) pull = `Biggest game left: ${matchup(big.game, true)}. ${esc(big.reason || favLine(big.game, big.p))}.`;
-  else if (done.length) pull = `Biggest result: ${natLead(done[0])}`;
+  else if (done.length) {
+    const g = done[0].game, w = g.winner, l = w === g.home ? g.away : g.home;
+    pull = natQuiet(done[0]) ? `Biggest result: ${teamLink(w, rkProse(w))} beat ${teamLink(l, rkProse(l))}.` : `Biggest result: ${natLead(done[0])}`;
+  }
   else pull = rows.length ? "Nothing big left this week." : "No games here this week.";
   const tally = [live.length ? `${live.length} on now` : "", upsets.length ? `${upsets.length} big upset${upsets.length > 1 ? "s" : ""} so far, the biggest ${esc(nm(upsets[0].upset.winner))} as a ${FanScore.pct(upsets[0].upset.pre)} underdog` : ""].filter(Boolean).join(" · ");
   $("#hero").innerHTML = `<div class="weeknav" role="group" aria-label="Week"><span class="wk-l">Week</span>${chips}<span class="wk-d">${range ? "from " + esc(range) : ""}</span></div>
