@@ -24,6 +24,28 @@ Weights default to `DEFAULT_WEIGHTS` and fans can adjust them on the page; rival
 [`rivals.json`](rivals.json) (by ESPN abbreviation) and fans can edit them. Both are kept in
 the browser.
 
+## Around the country
+
+Every game of the week for no team in particular (`scoreNationalWeek()` in `score.js`), at
+`#around`, with filters for the Top 25 and each conference (`#around/top25`, `#around/sec`).
+It's where a first visit lands; a returning visitor goes to the team they picked last. Team
+names link to that team's page, and Back returns.
+
+A game's stakes are what it can change for the season: the title-game odds that change hands
+across the conference races (**exact**, from Title Paths) and the chance the result carries a
+ranked team across a playoff line (top 4 and 12 now; an **estimate** from the rankings model).
+Interest is stakes times drama: before kickoff, how close the game is; under way, how close it is
+now or how far the odds have swung, whichever is more; once final, how surprising the result
+was, whatever the margin. So a coin flip outranks a mismatch with the same stakes, and an
+underdog winning big outranks a coin flip landing.
+
+The page shows live games first, then up to six must-watch games still to come, the rest ranked
+(the quiet ones folded), and finals ranked by surprise and stakes (above the games still to come
+once most of the week is played). Each card leads with its biggest stake in one sentence; **Why**
+says who the two teams are (record, title-race odds, last result), then each stake's numbers.
+Group of Five races don't have Title Paths odds yet, so their games rank on the playoff line and
+drama alone.
+
 ## The page
 
 One page, with detail on demand, for both the casual fan and the die-hard. It's laid out like
