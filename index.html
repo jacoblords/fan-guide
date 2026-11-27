@@ -281,7 +281,38 @@
   footer { margin-top: 28px; font-size: 12px; color: var(--faint); }
   .badge { display: inline-block; font-size: 11.5px; border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; margin-right: 6px; }
 
+  /* Around the country: every game, for no team in particular */
+  .sib + .sib { margin-left: 0; }
+  .sib[aria-current="page"] { color: var(--card); background: var(--ink); border-color: var(--ink); }
+  .sib .short { display: none; }
+  .filters { display: flex; flex-wrap: wrap; gap: 6px; margin: -2px 0 12px; }
+  .filters a { font-size: 13px; font-weight: 600; text-decoration: none; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; background: var(--card); white-space: nowrap; }
+  .filters a:hover { color: var(--ink); border-color: var(--muted); }
+  .filters a[aria-current="page"] { background: var(--ink); color: var(--card); border-color: var(--ink); }
+  a.tlink { color: inherit; text-decoration: none; }
+  a.tlink:hover { text-decoration: underline; text-underline-offset: 2px; }
+  .verdict.nat { --pick: var(--accent); }
+  .verdict.nat .lead { font-size: 14.5px; font-weight: 600; }
+  .rowg .whybtn { margin-left: 6px; font-size: 12.5px; }
+  .rowg .whybody { padding: 6px 0 2px 90px; }
+  .abt { display: grid; gap: 3px; font-size: 12.5px; color: var(--muted); margin-bottom: 8px; }
+  .abt b { color: var(--ink); font-weight: 650; }
+  .stk { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; align-items: baseline; font-size: 13px; }
+  .stk .lab { font-weight: 600; }
+  .stk .det { grid-column: 1 / -1; color: var(--muted); font-size: 12.5px; line-height: 1.45; margin: 0 0 6px; }
+  .stk .det:last-child { margin-bottom: 0; }
+  table.sw { border-collapse: collapse; font-variant-numeric: tabular-nums; margin: 2px 0 4px; }
+  table.sw caption { text-align: left; padding-bottom: 2px; }
+  table.sw th { font-weight: 600; font-size: 11.5px; text-align: right; padding: 0 0 0 14px; color: var(--muted); }
+  table.sw td { padding: 0; }
+  table.sw td + td { text-align: right; padding-left: 14px; color: var(--ink); }
+
   @media (max-width: 520px) {
+    .sib .long { display: none; }
+    .sib .short { display: inline; }
+    .sib { padding: 5px 9px; }
+    .sib.tp { display: none; } /* no room beside the national link; the footer links Title Paths */
+    .rowg .whybody { padding-left: 0; }
     .pop { position: fixed; left: 8px; right: 8px; top: 56px; width: auto; }
     .brand span { display: none; }
     .stake { font-size: 17px; }
@@ -304,7 +335,8 @@
         <div id="pickList" role="listbox" aria-label="Teams"></div>
       </div>
     </div>
-    <a class="sib" href="https://titlepaths.com/" title="Title Paths: every path to the conference title games">Title Paths ↗</a>
+    <a class="sib" id="natLink" href="#around" title="Every game this week, the most interesting first"><span class="long">Around the country</span><span class="short">All games</span></a>
+    <a class="sib tp" href="https://titlepaths.com/" title="Title Paths: every path to the conference title games">Title Paths ↗</a>
     <button class="icon-btn" id="gear" aria-label="Rivals and settings" title="Rivals and settings">⚙</button>
   </div>
 </header>
@@ -350,7 +382,8 @@ const store = {
 };
 const params = new URLSearchParams(location.search);
 let DATA, IX, RIVALS;
-const state = { team: null, week: null, open: new Set(), pulsed: new Set(), finals: null };
+// view: "team" (one team's games) or "around" (every game, for no team in particular).
+const state = { view: null, filter: "all", team: null, week: null, open: new Set(), pulsed: new Set(), finals: null };
 let FRESH = new Set();
 
 const rivalsFor = (tid) => store.get("rivals." + tid, null) || FanScore.defaultRivals(IX, RIVALS, tid);
@@ -367,10 +400,10 @@ const logo = (id, cls = "") => {
 };
 const rec = (id) => { const t = T(id), r = t.record; return r && t.conf && DATA.confs[t.conf] && r[0] + r[1] > 0 ? `${r[0]}-${r[1]}` : ""; };
 
-function starsHTML(v) {
+function starsHTML(v, tip = "how much this game matters to you") {
   if (v == null) return "";
   const n = Math.round(v * 2) / 2, full = Math.floor(n), half = n - full >= 0.5;
-  return `<span class="stars" title="${n} of 5: how much this game matters to you" aria-label="${n} of 5 stars"><span class="on">${"★".repeat(full)}</span>${half ? '<span class="half">★</span>' : ""}<span class="off">${"★".repeat(5 - full - (half ? 1 : 0))}</span></span>`;
+  return `<span class="stars" title="${n} of 5: ${esc(tip)}" aria-label="${n} of 5 stars"><span class="on">${"★".repeat(full)}</span>${half ? '<span class="half">★</span>' : ""}<span class="off">${"★".repeat(5 - full - (half ? 1 : 0))}</span></span>`;
 }
 function kickoff(g, withDay = true) {
   const d = new Date(g.date);
@@ -385,7 +418,10 @@ const size = (s) => { const a = Math.abs(s); return a >= 4 ? "huge" : a >= 2.5 ?
 
 // Away over home, as on Title Paths' gameday cards: logo, rank, name, record, and the score once
 // the game is on. The leader's (or winner's) score is bold; a loser fades.
-function teamsHTML(r) {
+// A team's name as a link to its own page (on the national page), when it has one.
+const teamLink = (id, html) => { const t = T(id); return t.pickable && t.abbr ? `<a class="tlink" href="#${esc(encodeURIComponent(t.abbr))}" title="${esc(nm(id))}: the games that matter to them">${html}</a>` : html; };
+
+function teamsHTML(r, links = false) {
   const g = r.game, scored = (g.done && !g.canceled) || g.state === "in";
   const row = (side) => {
     const id = g[side], t = T(id), sc = side === "home" ? g.homeScore : g.awayScore, osc = side === "home" ? g.awayScore : g.homeScore;
@@ -393,7 +429,8 @@ function teamsHTML(r) {
     const you = r.pick === id ? `<span class="you">${r.mine ? "you" : "pick"}</span>` : "";
     const pSide = side === "home" ? r.p : 1 - r.p;
     const right = scored ? esc(sc) : pSide >= 0.5 ? `<span class="odds" title="ESPN's odds of winning">${FanScore.pct(pSide)}</span>` : "";
-    return `<div class="trow ${cls}">${logo(id)}<span class="nm">${t.rank ? `<span class="rk">${esc(t.rank)}</span>` : ""}${esc(nm(id))}<span class="rec">${esc(rec(id))}</span>${you}</span><span class="sc">${right}</span></div>`;
+    const label = esc(nm(id));
+    return `<div class="trow ${cls}">${logo(id)}<span class="nm">${t.rank ? `<span class="rk">${esc(t.rank)}</span>` : ""}${links ? teamLink(id, label) : label}<span class="rec">${esc(rec(id))}</span>${you}</span><span class="sc">${right}</span></div>`;
   };
   return `<div class="teams">${row("away")}${row("home")}</div>`;
 }
@@ -660,6 +697,11 @@ const GROUP_TAGLINES = {
 };
 
 function render() {
+  document.title = state.view === "around" ? "Around the country · Gameday Stakes" : "Gameday Stakes";
+  $("#natLink").setAttribute("aria-current", state.view === "around" ? "page" : "false");
+  $("#gear").hidden = state.view !== "team";
+  if (state.view === "around") return renderAround();
+  $("#final").style.order = "";
   const f = fan();
   const { rows, tally } = FanScore.scoreWeek(IX, f, state.week);
   const h = FanScore.headline(IX, f, state.week, rows);
@@ -730,10 +772,187 @@ function render() {
   tickers();
 }
 
+// ---- around the country ---------------------------------------------------------------------
+// Every game of the week for no team in particular (FanScore.scoreNationalWeek): live games
+// first, then the must-watch games still to come, the rest ranked, and finals ranked by how
+// surprising and how consequential they were. Filters: all FBS, the Top 25, or a conference.
+// Team names link to that team's own page.
+
+const NAT_TIP = "how much this game matters to the season";
+const confSlug = (c) => (c === "18" ? "independents" : fold(confName(c)).replace(/ /g, "-"));
+const filterSlug = (f) => (f === "all" ? "" : f === "top25" ? "top25" : confSlug(f));
+const aroundHash = (f) => "#around" + (filterSlug(f) ? "/" + filterSlug(f) : "");
+const filterName = (f) => (f === "all" ? "Around the country" : f === "top25" ? "Top 25" : confName(f));
+function filterList() {
+  const cs = Object.keys(DATA.confs).filter((c) => c !== "18");
+  const p4 = cs.filter((c) => DATA.confs[c].p4).sort((a, b) => confName(a).localeCompare(confName(b)));
+  const g5 = cs.filter((c) => !DATA.confs[c].p4).sort((a, b) => confName(a).localeCompare(confName(b)));
+  return ["all", "top25", ...p4, ...g5, ...(DATA.confs["18"] ? ["18"] : [])];
+}
+
+// In a sentence a rank reads "No. 12 Texas Tech"; in a row, a small muted number.
+const rkProse = (id) => { const t = T(id); return (t.rank ? `No. ${esc(t.rank)} ` : "") + esc(nm(id)); };
+const matchup = (g, links) => `${teamLink(g.away, rkProse(g.away))} ${g.neutral ? "vs" : "at"} ${teamLink(g.home, rkProse(g.home))}`;
+const rkLinked = (id, links = true) => (links ? teamLink(id, rkName(id)) : rkName(id));
+const favLine = (g, p) => { const [t, q] = p >= 0.5 ? [g.home, p] : [g.away, 1 - p]; return `${esc(nm(t))} ${FanScore.pct(q)} to win`; };
+// The card's one line: the bigger stake, else the upset, else just the odds.
+const natLead = (r) => (r.reason ? esc(r.reason) + "." : r.upset ? upsetLine(r.upset) + "." : `Not much riding on it for the rest of the country. ${favLine(r.game, r.p)}.`);
+
+// Why, for a reader who may not know either team: who they are, then each stake with its numbers,
+// then why the game sits where it does (stakes times drama).
+function natWhyHTML(r) {
+  const g = r.game;
+  const abt = [g.away, g.home].map((id) => { const a = FanScore.about(IX, id, g); return `<div><b>${teamLink(id, rkProse(id))}</b>${a.length ? ": " + esc(a.join(" · ")) : ""}</div>`; }).join("");
+  const parts = [];
+  if (r.title) {
+    // Each race as a small table: the teams the result moves by two points or more (at least the
+    // biggest), their odds either way; a finished game, before and after.
+    const byRace = new Map();
+    r.title.moves.forEach((m, i) => { if (i < 6 && (i === 0 || Math.abs(m.d) >= 0.02)) (byRace.get(m.race) || byRace.set(m.race, []).get(m.race)).push(m); });
+    const ab = (id) => esc(T(id).abbr || nm(id));
+    const det = [...byRace].map(([race, ms]) => {
+      const fin = ms.every((m) => m.done);
+      const head = fin ? ["Before", "After"] : [`${ab(g.away)} wins`, `${ab(g.home)} wins`];
+      const cells = (m) => (fin ? [m.done.before, m.done.after] : [m.ifA, m.ifH]).map((v) => `<td>${FanScore.pct(v)}</td>`).join("");
+      return `<table class="sw"><caption>${esc(race.name)} title-game odds · <a href="${esc(race.url)}" target="_blank" rel="noopener">title paths</a></caption>
+        <tr><th></th><th>${head[0]}</th><th>${head[1]}</th></tr>${ms.map((m) => `<tr><td>${teamLink(m.team, esc(nm(m.team)))}</td>${cells(m)}</tr>`).join("")}</table>`;
+    }).join("");
+    parts.push(`<span class="lab">Title race</span>${starsHTML(r.stakes.title, "title-race stakes")}<div class="det">${det}</div>`);
+  }
+  if (r.playoff) {
+    const seen = new Set(), items = r.playoff.lines.filter((x) => !seen.has(x.team) && seen.add(x.team)).slice(0, 2);
+    const det = items.map((x) => `${rkProse(x.team)}: about No. ${Math.max(1, Math.round(x.win))} with a win, No. ${Math.round(x.loss)} with a loss (top ${x.line} is ${esc(({ 4: "a bye", 12: "the field" })[x.line] || "a line")})`).join("<br>");
+    parts.push(`<span class="lab">Playoff line</span>${starsHTML(r.stakes.playoff, "playoff stakes (estimate)")}<div class="det">${det}. Estimated from the rankings.</div>`);
+  }
+  const fin = g.done && !g.canceled && g.winner;
+  const pw = fin ? (g.winner === g.home ? r.p : 1 - r.p) : null;
+  const drama = fin ? `${esc(nm(g.winner))} was ${FanScore.pct(pw)} to win before kickoff${pw < 0.5 ? ", so a surprise" : ""}`
+    : g.state === "in" ? `${favLine(g, r.pNow)} now, ${favLine(g, r.p).replace(/ to win$/, "")} before kickoff`
+    : `${favLine(g, r.p)}${g.spread ? " · " + esc(g.spread) : ""}${Math.abs(r.p - 0.5) < 0.1 ? ": close to a coin flip" : ""}`;
+  parts.push(`<span class="lab">Odds</span><span></span><div class="det">${drama}. Close games, and surprises, rank higher.</div>`);
+  return `<div class="abt">${abt}</div><div class="stk">${parts.join("")}</div>`;
+}
+
+const whyParts = (r) => {
+  const key = r.game.id, open = state.open.has(key);
+  return [`<button class="whybtn" data-why="${esc(key)}" aria-expanded="${open}">Why</button>`, `<div class="whybody"${open ? "" : " hidden"}>${natWhyHTML(r)}</div>`];
+};
+
+function natCardHTML(r, li) {
+  const g = r.game, live = g.state === "in", fin = g.done && !g.canceled && g.winner, scored = live || fin;
+  const when = live ? `<span class="pill live">LIVE</span> ${esc(g.status || "")}` : g.done ? "Final" : esc(kickoff(g));
+  const head = [when, g.tv && !g.done ? esc(g.tv) : "", g.spread && !scored ? esc(g.spread) : ""].filter(Boolean).join(" · ");
+  const upset = r.upset ? `<span class="pill upset" title="${upsetLine(r.upset)}">Upset</span>` : "";
+  const hot = li && li.why ? `<div class="hotline">${esc(li.why)}</div>` : "";
+  const odds = fin ? movedHTML(g) : null;
+  const [why, body] = whyParts(r);
+  return `<article class="card ${live ? "live" : ""} ${r.upset ? "upset" : ""}">
+    <div class="meta"><span class="left">${head} ${upset}</span><span class="right">${starsHTML(r.stars, NAT_TIP)}</span></div>
+    ${teamsHTML(r, true)}
+    ${hot}
+    <div class="verdict nat"><div class="lead">${natLead(r)}</div></div>
+    ${scored && g.wp ? wpChart(g) : live ? factsHTML(r) : ""}
+    ${odds ? `<div class="moved"><span class="lbl">Title odds</span><div class="mv-track"><div class="mv-belt"><span class="mv-run">${odds}</span></div></div></div>` : ""}
+    <div class="cfoot">${why}${linksHTML(g)}</div>
+    ${body}
+  </article>`;
+}
+
+function natRowHTML(r) {
+  const g = r.game, fin = g.done && !g.canceled && g.winner;
+  let l1;
+  if (fin) {
+    const w = g.winner, l = w === g.home ? g.away : g.home;
+    const ws = w === g.home ? g.homeScore : g.awayScore, ls = w === g.home ? g.awayScore : g.homeScore;
+    l1 = `<span class="t">Final</span>${logo(w, "sm")}<span><b>${rkLinked(w)}</b> beat ${rkLinked(l)}${ws != null ? ` ${esc(ws)}-${esc(ls)}` : ""}</span>`;
+  } else l1 = `<span class="t">${esc(kickoff(g))}</span><span>${matchup(g, true)}</span>`;
+  const upset = r.upset ? `<b class="upset-tag">Upset:</b> ${upsetLine(r.upset)}. ` : "";
+  const odds = fin ? movedHTML(g) : null;
+  const [why, body] = whyParts(r);
+  return `<div class="rowg${fin ? " final" : ""}${r.upset ? " upset" : ""}"><div class="l1">${l1}<span class="s">${starsHTML(r.stars, NAT_TIP)}</span></div>
+    <div class="l2">${upset}${r.reason ? esc(r.reason) + "." : r.upset ? "" : favLine(g, r.p) + "."}${why}</div>
+    ${odds ? `<div class="moved"><span class="lbl">Title odds</span><div class="mv-track"><div class="mv-belt"><span class="mv-run">${odds}</span></div></div></div>` : ""}${body}</div>`;
+}
+
+// A list of rows with the quiet ones folded away under "Show N more"; an upset always shows.
+const QUIET = 1.5;
+function rowsGroup(key, title, tagline, list) {
+  const shown = list.filter((r) => r.stars >= QUIET || r.upset), quiet = list.filter((r) => !shown.includes(r));
+  const fold = quiet.length ? `<details class="routine" data-g="routine-${key}"${state.open.has("g:routine-" + key) ? " open" : ""}><summary title="Little riding on these for the rest of the country">Show ${quiet.length} more game${quiet.length > 1 ? "s" : ""}</summary>${quiet.map(natRowHTML).join("")}</details>` : "";
+  const open = !state.open.has("closed:" + key);
+  return `<details class="group" data-g="${key}"${open ? " open" : ""}><summary><span class="gname">${esc(title)}</span><span class="tagline">${esc(tagline)}</span></summary>${shown.map(natRowHTML).join("")}${fold}</details>`;
+}
+
+function renderAround() {
+  const all = FanScore.scoreNationalWeek(IX, state.week);
+  feed.rank = all.map((r) => r.game.id);
+  const rows = all.filter((r) => FanScore.inFilter(IX, r.game, state.filter));
+  const fin = (r) => r.game.done && !r.game.canceled && r.game.winner;
+  const live = rows.filter((r) => r.game.state === "in" && !r.game.done);
+  const done = rows.filter(fin);
+  const ahead = rows.filter((r) => !fin(r) && !live.includes(r)).sort((a, b) => b.prePriority - a.prePriority);
+  const liveOf = new Map(live.map((r) => [r.game.id, FanScore.liveInterest(IX, r)]));
+  live.sort((a, b) => ((liveOf.get(b.game.id) || {}).score || 0) - ((liveOf.get(a.game.id) || {}).score || 0));
+
+  // Must-watch: the best games still to come (three stars or more; in a narrow filter, the best
+  // two of two stars or more), in kickoff order.
+  let must = ahead.filter((r) => r.preStars >= 3).slice(0, 6);
+  if (!must.length) must = ahead.filter((r) => r.preStars >= 2).slice(0, 2);
+  const rest = ahead.filter((r) => !must.includes(r));
+
+  // This week: the filter's name, the biggest game left, and the upsets so far.
+  const cal = (DATA.calendar || []).find((c) => c.week === state.week);
+  const range = cal ? new Date(cal.start.replace("Z", ":00Z")).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "";
+  const weeks = [...new Set(DATA.games.map((g) => g.week))].sort((a, b) => a - b);
+  const chips = weeks.map((w) => `<button data-week="${w}" class="wk${w === DATA.week ? " now" : ""}" aria-pressed="${w === state.week}"${w === DATA.week ? ' title="This week"' : ""}>${w}</button>`).join("");
+  const filters = filterList().map((f) => `<a href="${aroundHash(f)}"${f === state.filter ? ' aria-current="page"' : ""}>${esc(f === "all" ? "All FBS" : f === "top25" ? "Top 25" : confName(f))}</a>`).join("");
+  const upsets = done.filter((r) => r.upset).sort((a, b) => a.upset.pre - b.upset.pre);
+  const big = ahead[0] && ahead[0].preStars >= 2 ? ahead[0] : null;
+  let pull;
+  if (big) pull = `Biggest game left: ${matchup(big.game, true)}. ${esc(big.reason || favLine(big.game, big.p))}.`;
+  else if (done.length) pull = `Biggest result: ${natLead(done[0])}`;
+  else pull = rows.length ? "Nothing big left this week." : "No games here this week.";
+  const tally = [live.length ? `${live.length} on now` : "", upsets.length ? `${upsets.length} big upset${upsets.length > 1 ? "s" : ""} so far, the biggest ${esc(nm(upsets[0].upset.winner))} as a ${FanScore.pct(upsets[0].upset.pre)} underdog` : ""].filter(Boolean).join(" · ");
+  $("#hero").innerHTML = `<div class="weeknav" role="group" aria-label="Week"><span class="wk-l">Week</span>${chips}<span class="wk-d">${range ? "from " + esc(range) : ""}</span></div>
+    <nav class="filters" aria-label="Which games">${filters}</nav>
+    <div class="top"><div><p class="stake">${esc(filterName(state.filter))}: the games that shape the season</p><p class="pull">${pull}</p></div></div>
+    <p class="talk">Ranked by what each game can change (the title races and the playoff lines), weighted toward close games and surprises. Tap a team to see the games that matter to them.</p>
+    ${tally ? `<span class="tally">${tally}</span>` : ""}`;
+
+  $("#live").innerHTML = live.length ? `<h2><span class="dot"></span>Live now</h2><div class="cards">${live.map((r) => natCardHTML(r, liveOf.get(r.game.id))).join("")}</div>` : "";
+  const mustSorted = [...must].sort((a, b) => a.game.date.localeCompare(b.game.date));
+  $("#must").innerHTML = mustSorted.length ? `<h2>Must-watch</h2><div class="cards">${mustSorted.map((r) => natCardHTML(r)).join("")}</div>` : "";
+  $("#groups").innerHTML = rest.length ? `<h2>More games</h2><div class="groupgrid">${rowsGroup("ahead", "Still to play", "The rest, most interesting first", rest)}</div>` : "";
+  // Finals: the most surprising and consequential first. Once most of the week is played they
+  // come up above the games still to come.
+  $("#final").innerHTML = done.length ? `<h2>Final</h2><div class="groupgrid">${rowsGroup("done", "Results", "Surprises and big swings first", done)}</div>` : "";
+  $("#final").style.order = done.length > ahead.length ? "3" : "";
+  tickers();
+}
+
 function renderPicker() {
-  const t = T(state.team);
-  $("#pickLogo").innerHTML = logo(state.team, "sm");
-  $("#pickName").textContent = t.short || t.name || "Pick a team";
+  const team = state.view === "team" ? state.team : null, t = T(team);
+  $("#pickLogo").innerHTML = team ? logo(team, "sm") : "";
+  $("#pickName").textContent = (team && (t.short || t.name)) || "Pick your team";
+}
+
+/** The page the address asks for: { view: "around", filter } from #around or #around/<filter>,
+ * { view: "team", team } from #<abbreviation>, else null. */
+function routeOf(ix, d) {
+  const h = decodeURIComponent(location.hash.slice(1));
+  if (h === "around" || h.startsWith("around/")) {
+    const slug = h.slice(7);
+    return { view: "around", filter: !slug ? "all" : slug === "top25" ? "top25" : Object.keys(d.confs).find((c) => confSlug(c) === slug) || "all" };
+  }
+  const id = ix.byAbbr.get(h);
+  return id ? { view: "team", team: id } : null;
+}
+
+function showAround(filter) {
+  state.view = "around";
+  state.filter = filter || "all";
+  renderPicker();
+  render();
 }
 
 // Team picker: search by team, abbreviation or conference; the teams picked most recently come
@@ -816,7 +1035,7 @@ function closePicker(focusButton) {
 }
 function choose(id) {
   closePicker(true);
-  if (id && id !== state.team) pickTeam(id);
+  if (id && (id !== state.team || state.view !== "team")) pickTeam(id);
 }
 
 function renderTune() {
@@ -831,12 +1050,15 @@ function renderTune() {
 }
 
 function setTeam(tid) {
+  const from = state.view;
+  state.view = "team";
   state.team = tid;
   state.open.clear();
   store.set("team", tid);
   store.set("recent", [tid, ...store.get("recent", []).filter((x) => x !== tid)].slice(0, RECENT_MAX));
-  const t = T(tid);
-  if (t.abbr) history.replaceState(null, "", location.search + "#" + encodeURIComponent(t.abbr));
+  const t = T(tid), hash = "#" + encodeURIComponent(t.abbr || "");
+  // From the national page, a new history entry, so Back returns to it.
+  if (t.abbr && location.hash !== hash) history[from === "around" ? "pushState" : "replaceState"](null, "", location.search + hash);
   renderPicker();
   renderTune();
   render();
@@ -919,11 +1141,18 @@ let demoAllowed = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname
 async function boot(opts = {}) {
   const [d, rv] = await Promise.all([opts.data || fetch("data.json", { cache: "no-cache" }).then((r) => r.json()), RIVALS || fetch("rivals.json", { cache: "no-cache" }).then((r) => r.json())]);
   const pre = FanScore.index(d);
-  const fromHash = pre.byAbbr.get(decodeURIComponent(location.hash.slice(1)));
+  // Where to land: the address first (#around…, or a team's #abbreviation); then the team this
+  // browser picked last; a first visit, with neither, lands on the national page.
+  const route = routeOf(pre, d);
   const saved = store.get("team", null);
-  const team = (state.team && pre.teams.has(state.team) && state.team) || fromHash || (pre.teams.has(saved) ? saved : d.teams.find((t) => t.pickable).id);
+  const team = (state.team && pre.teams.has(state.team) && state.team) || (route && route.team) || (pre.teams.has(saved) ? saved : null);
+  if (!state.view) {
+    state.view = route ? route.view : team ? "team" : "around";
+    if (route && route.filter) state.filter = route.filter;
+  }
   if (d.preview) demoAllowed = true; // a preview copy of the data (never the deployed one) allows the demo too
-  if (demo) demoLive(d, rv, team);
+  // The demo builds its Saturday around a team: the picked one, else the top-ranked.
+  if (demo) demoLive(d, rv, team || [...d.teams].filter((t) => t.rank).sort((a, b) => a.rank - b.rank).concat(d.teams.filter((t) => t.pickable))[0].id);
   DATA = d; RIVALS = rv;
   if (opts.refresh && feed.last) applyLive(feed.last, false); // keep scores newer than the data file
   IX = FanScore.index(d);
@@ -934,7 +1163,11 @@ async function boot(opts = {}) {
     Ranking effects are estimates until the next poll and ESPN's SOR update.
     ${demoAllowed ? `<div style="margin-top:8px"><button class="btn" id="demoToggle">${demo ? "Back to the real schedule" : "Preview game day (fake scores)"}</button></div>` : ""}`;
   if (opts.refresh) { redraw(); return; }
-  setTeam(team);
+  if (state.view === "team" && team) return setTeam(team);
+  state.view = "around";
+  state.team = team;
+  if (team) renderTune();
+  showAround(state.filter);
 }
 
 // ---- live updates --------------------------------------------------------------------------
@@ -1008,7 +1241,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) tick
 addEventListener("resize", () => { clearTimeout(feed.resize); feed.resize = setTimeout(tickers, 200); });
 feed.timer = setInterval(tick, LIVE_MS);
 
-const pickTeam = (id) => { if (demo) { state.team = id; boot(); } else setTeam(id); };
+const pickTeam = (id) => { if (demo) { state.team = id; state.view = "team"; boot(); } else setTeam(id); };
 $("#pickBtn").addEventListener("click", () => ($("#pickPop").hidden ? openPicker() : closePicker(false)));
 $("#pickQ").addEventListener("input", renderPickList);
 $("#pickQ").addEventListener("keydown", (e) => {
@@ -1030,7 +1263,13 @@ $("#foot").addEventListener("click", (e) => {
   demo = !demo;
   boot().then(() => scrollTo(0, 0));
 });
-window.addEventListener("hashchange", () => { const id = IX && IX.byAbbr.get(decodeURIComponent(location.hash.slice(1))); if (id && id !== state.team) pickTeam(id); });
+// The address picks the page: a team's link (#BYU), or the national page and its filter (#around/sec).
+window.addEventListener("hashchange", () => {
+  if (!IX) return;
+  const r = routeOf(IX, DATA);
+  if (r && r.view === "around") { state.open.clear(); showAround(r.filter); scrollTo(0, 0); }
+  else if (r && (r.team !== state.team || state.view !== "team")) { pickTeam(r.team); scrollTo(0, 0); }
+});
 $("#hero").addEventListener("click", (e) => {
   if (e.target.closest && e.target.closest("[data-tune]")) return $("#tune").showModal();
   const w = e.target.closest && e.target.closest(".wk");
@@ -1052,7 +1291,7 @@ document.addEventListener("click", (e) => {
   const id = b.dataset.why, open = b.getAttribute("aria-expanded") !== "true";
   open ? state.open.add(id) : state.open.delete(id);
   b.setAttribute("aria-expanded", open);
-  const body = b.closest(".card").querySelector(".whybody");
+  const body = b.closest(".card, .rowg").querySelector(".whybody");
   if (body) body.hidden = !open;
 });
 $("#gear").addEventListener("click", () => $("#tune").showModal());

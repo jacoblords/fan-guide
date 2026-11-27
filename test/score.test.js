@@ -462,3 +462,67 @@ test("games before the committee's first ranking show the AP poll's real move", 
   const ap = rankLine(ix, "T4", "p8"); // T4 loses at T1 on Oct 24
   assert.deepStrictEqual(ap.find((it) => it.tag === "AP"), { tag: "AP", was: 4, now: 7, good: false, est: false });
 });
+
+// ---- around the country -------------------------------------------------------------------
+
+// Two games with the same stakes (neither touches a title race or a ranked team) differing only
+// in the odds and the result.
+function pair(a, b) {
+  const ix = fixture();
+  ix.data.games.push({ id: "n1", week: 12, date: "2026-11-21T19:00Z", home: "B", away: "O", conf: false, ...a });
+  ix.data.games.push({ id: "n2", week: 12, date: "2026-11-21T19:00Z", home: "B", away: "O", conf: false, ...b });
+  const ix2 = S.index(ix.data);
+  const by = new Map(S.scoreNationalWeek(ix2, 12).map((r) => [r.game.id, r]));
+  return [by.get("n1"), by.get("n2")];
+}
+
+test("national: a coin flip outranks a mismatch with the same stakes", () => {
+  const [flip, lock] = pair({ pHome: 0.5 }, { pHome: 0.9 });
+  assert.ok(flip.priority > lock.priority);
+});
+
+test("national: a finished upset outranks a coin flip landing, however big the margin", () => {
+  const [upset, flip] = pair(
+    { pHome: 0.85, done: true, winner: "O", homeScore: 3, awayScore: 45 },
+    { pHome: 0.5, done: true, winner: "B", homeScore: 24, awayScore: 21 });
+  assert.ok(upset.priority > flip.priority);
+  assert.ok(upset.upset, "marked as a big upset");
+});
+
+test("national: an underdog leading big ranks above the same game before kickoff", () => {
+  const [live, pre] = pair(
+    { pHome: 0.8, state: "in", period: 3, clock: "5:00", homeScore: 3, awayScore: 31 },
+    { pHome: 0.8 });
+  assert.ok(live.priority > pre.priority);
+});
+
+test("national: title-race stakes come from every team the result moves", () => {
+  const ix = fixture();
+  ix.teams.get("A").rank = null; // no playoff line in play, so the title race leads
+  const r = S.scoreNational(ix, ix.data.games.find((g) => g.id === "g1"));
+  assert.ok(Math.abs(r.title.raw - (0.25 + 0.04) / 2) < 1e-9);
+  assert.strictEqual(r.lead, "title");
+  assert.strictEqual(r.reason, "X's Big 12 title-game odds: 30% if A wins, 55% if B wins");
+});
+
+test("national: a ranked favorite near a line carries playoff stakes", () => {
+  const ix = fixture();
+  const r = S.scoreNational(ix, ix.data.games.find((g) => g.id === "g2"));
+  assert.ok(r.playoff && r.playoff.lines[0].team === "R" && r.playoff.lines[0].line === 12);
+  assert.match(r.reason, /No\. 6 R out of the top 12/);
+});
+
+test("national: filters by Top 25 and by conference", () => {
+  const ix = fixture();
+  const g = (id) => ix.data.games.find((x) => x.id === id);
+  assert.ok(S.inFilter(ix, g("g1"), "top25")); // A is ranked
+  assert.ok(S.inFilter(ix, g("g2"), "8")); // O is SEC
+  assert.ok(!S.inFilter(ix, g("g1"), "8"));
+  assert.ok(S.inFilter(ix, g("g1"), "all"));
+});
+
+test("national: about() says who a team is", () => {
+  const ix = fixture();
+  const lines = S.about(ix, "X", ix.data.games.find((g) => g.id === "g3"));
+  assert.deepStrictEqual(lines, ["6-4 (4-3 Big 12)", "40% to reach the Big 12 title game", "last beat B 30-20"]);
+});

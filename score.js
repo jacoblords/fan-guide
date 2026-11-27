@@ -137,25 +137,30 @@
 
   // ---- signals -----------------------------------------------------------------------------
 
+  /** Team tid's title-game odds in `race` if the home team wins and if the away team wins:
+   * { swing: [ifHome, ifAway], done }, or null. A finished game is gone from Title Paths' odds;
+   * its swing is rebuilt from what Title Paths recorded at the final (odds before, and after), so
+   * the game keeps its reason and rating: after - before = (1 - p) x (odds if the winner wins -
+   * odds if the loser wins), where p is the winner's pre-game chance. `done` is then
+   * { before, after }. */
+  function raceSwing(ix, race, g, tid) {
+    const sw = race && race.games && race.games[g.id] && race.games[g.id][tid];
+    if (sw) return sw[0] == null ? null : { swing: sw, done: null };
+    const mv = race && race.moved && race.moved[g.id] && race.moved[g.id][tid];
+    if (!mv || !g.done || !g.winner) return null;
+    const p = pHome(ix, g), pw = g.winner === g.home ? p : 1 - p;
+    const d = Math.max(-1, Math.min(1, (mv[1] - mv[0]) / Math.max(1 - pw, 0.02)));
+    const ifW = mv[1], ifL = Math.max(0, Math.min(1, mv[1] - d));
+    return { swing: g.winner === g.home ? [ifW, ifL] : [ifL, ifW], done: { before: mv[0], after: mv[1] } };
+  }
+
   function confSignal(ix, fan, g) {
     const X = ix.teams.get(fan.team);
     const race = X && ix.data.confOdds[X.conf];
     const mine = race && race.teams[fan.team];
-    let swing = race && race.games[g.id] && race.games[g.id][fan.team];
-    let done = null;
-    // A finished game is gone from Title Paths' odds; rebuild its swing from what Title Paths
-    // recorded at the final (odds before, and after), so the game keeps its reason and rating:
-    // after - before = (1 - p) x (odds if the winner wins - odds if the loser wins), where p is
-    // the winner's pre-game chance.
-    const mv = race && race.moved && race.moved[g.id] && race.moved[g.id][fan.team];
-    if (!swing && mv && g.done && g.winner) {
-      const p = pHome(ix, g), pw = g.winner === g.home ? p : 1 - p;
-      const d = Math.max(-1, Math.min(1, (mv[1] - mv[0]) / Math.max(1 - pw, 0.02)));
-      const ifW = mv[1], ifL = Math.max(0, Math.min(1, mv[1] - d));
-      swing = g.winner === g.home ? [ifW, ifL] : [ifL, ifW];
-      done = { before: mv[0], after: mv[1] };
-    }
-    if (!swing || swing[0] == null || (!done && (!mine || mine.clinched || mine.eliminated))) return null;
+    const rs = raceSwing(ix, race, g, fan.team);
+    const swing = rs && rs.swing, done = rs && rs.done;
+    if (!swing || (!done && (!mine || mine.clinched || mine.eliminated))) return null;
     const [ifH, ifA] = swing;
     const raw = ifH - ifA;
     if (Math.abs(raw) < 0.005) return null;
@@ -655,6 +660,166 @@
     return { score, why, hot: !!why && (r.mine || (r.stars || 0) >= 2), going, upset, climbed };
   }
 
+  // ---- around the country: every game, for no team in particular --------------------------
+  // The fan's signals ask what a game does for one team; here the question is what it does to
+  // the season. Stakes: how much the result moves the conference title races (exact, from Title
+  // Paths) and how likely it is to carry a team across a playoff line (an estimate, from the
+  // same movement model the rankings signal uses). Interest is the stakes times drama: how close
+  // the game is before kickoff, how far the odds have swung once it's under way, and how
+  // surprising the result was once it's final. So an underdog winning big ranks above a coin
+  // flip landing, and a heavy favorite's routine win sinks however famous the teams are.
+  const NAT_STEPS = {
+    title: [0.03, 0.08, 0.16, 0.3, 0.6], // title-game odds that change hands (half the sum of every team's move)
+    playoff: [0.1, 0.25, 0.45, 0.7, 1.1], // chance the result carries a team across a line, summed
+  };
+  const LINE_SD = 1.5; // how sharp a playoff line is, in ranking spots
+  const NAT_FLOOR = 0.5; // stakes every FBS game has, so a big upset of nobody in particular still shows
+
+  /** How the result moves the title races: { raw, moves: [{ team, race, ifH, ifA, d, done }] },
+   * biggest move first, or null. raw is the title-game odds that change hands. */
+  function titleImpact(ix, g) {
+    const moves = [];
+    for (const race of Object.values(ix.data.confOdds || {})) {
+      const ids = new Set([...Object.keys((race.games || {})[g.id] || {}), ...Object.keys((race.moved || {})[g.id] || {})]);
+      for (const tid of ids) {
+        const s = raceSwing(ix, race, g, tid);
+        if (!s || !ix.teams.has(tid)) continue;
+        const [ifH, ifA] = s.swing, d = ifH - ifA;
+        if (Math.abs(d) >= 0.005) moves.push({ team: tid, race, ifH, ifA, d, done: s.done });
+      }
+    }
+    if (!moves.length) return null;
+    moves.sort((a, b) => Math.abs(b.d) - Math.abs(a.d));
+    return { raw: moves.reduce((s, m) => s + Math.abs(m.d), 0) / 2, moves };
+  }
+
+  /** How likely the result is to carry a team across a playoff line (top 4 and 12 now): { raw,
+   * lines: [{ team, line, rank, win, loss, cross, inside }] }, biggest first, or null. win and
+   * loss are the team's estimated spot after each result; cross is how much more likely it is
+   * to be inside the line after one result than the other. */
+  function playoffImpact(ix, g, p) {
+    const out = [];
+    for (const [t, o, pw] of [[g.home, g.away, p], [g.away, g.home, 1 - p]]) {
+      const T = ix.teams.get(t);
+      if (!T || !T.rank || !isFBS(ix, t)) continue; // an unranked team's win lands it in the 20s at best
+      const win = T.rank - movement(ix, t, o, true, pw), loss = T.rank - movement(ix, t, o, false, pw);
+      for (const line of lines(ix.data.season)) {
+        const inside = (spot) => normCdf((line + 0.5 - spot) / LINE_SD);
+        const cross = Math.abs(inside(win) - inside(loss));
+        if (cross >= 0.05) out.push({ team: t, line, rank: T.rank, win, loss, cross, inside: T.rank <= line });
+      }
+    }
+    if (!out.length) return null;
+    out.sort((a, b) => b.cross - a.cross);
+    return { raw: out.reduce((s, x) => s + x.cross, 0), lines: out };
+  }
+
+  const LINE_NAMES = { 4: "a first-round bye", 8: "a first-round bye", 12: "the playoff field", 16: "a home playoff game", 24: "the playoff field" };
+
+  /** One sentence on the title race, for someone who doesn't follow either team. */
+  function titleReason(ix, g, t) {
+    // A team in the game is easier to follow than a third party, so it leads when its move is
+    // close to the biggest.
+    const top = Math.abs(t.moves[0].d);
+    const m = t.moves.find((x) => (x.team === g.home || x.team === g.away) && Math.abs(x.d) >= 0.7 * top) || t.moves[0];
+    const T = name(ix, m.team), race = m.race.name;
+    const playing = m.team === g.home || m.team === g.away;
+    if (m.done) {
+      const up = m.done.after > m.done.before;
+      return playing ? `${poss(T)} ${race} title-game odds went ${pct(m.done.before)} → ${pct(m.done.after)}`
+        : `${up ? "Lifted" : "Dented"} ${poss(T)} ${race} title-game odds: ${pct(m.done.before)} → ${pct(m.done.after)}`;
+    }
+    if (!playing) return `${poss(T)} ${race} title-game odds: ${pct(m.ifH)} if ${name(ix, g.home)} wins, ${pct(m.ifA)} if ${name(ix, g.away)} wins`;
+    const [ifWin, ifLose] = m.team === g.home ? [m.ifH, m.ifA] : [m.ifA, m.ifH];
+    if (ifWin >= 0.995 && ifLose < 0.995) return `Win and ${T} is in the ${race} title game`;
+    if (ifLose <= 0.005 && ifWin > 0.005) return `Lose and ${T} is out of the ${race} title race`;
+    return `${poss(T)} ${race} title-game odds: ${pct(ifWin)} with a win, ${pct(ifLose)} with a loss`;
+  }
+
+  /** One sentence on the playoff line. A finished game speaks to what the result did. */
+  function playoffReason(ix, g, pl) {
+    const done = g.done && !g.canceled && g.winner;
+    // A finished game: the crossing that happened (an inside team lost, an outside team won).
+    const x = done ? pl.lines.find((l) => (l.team === g.winner) !== l.inside) : pl.lines[0];
+    if (!x) return null;
+    const T = ranked(ix, x.team), what = `the top ${x.line}${LINE_NAMES[x.line] ? `, ${LINE_NAMES[x.line]}` : ""}`;
+    const sure = x.cross >= 0.5 ? "likely" : "could";
+    if (done) return x.inside ? `The loss ${sure === "likely" ? "likely drops" : "could drop"} ${T} out of ${what}` : `The win ${sure === "likely" ? "likely lifts" : "could lift"} ${T} into ${what}`;
+    return x.inside ? `A loss ${sure === "likely" ? "likely drops" : "could drop"} ${T} out of ${what}` : `A win ${sure === "likely" ? "likely lifts" : "could lift"} ${T} into ${what}`;
+  }
+
+  /** Drama, about 0.2 to 1.2: closeness before kickoff; once under way, closeness now or how far
+   * the odds have swung, whichever is more; once final, how surprising the result was. */
+  const closeness = (q) => 4 * q * (1 - q);
+  function drama(g, p, pNow) {
+    if (g.done && !g.canceled && g.winner) return 0.2 + (g.winner === g.home ? 1 - p : p);
+    if (g.state === "in") return Math.max(0.2 + 0.8 * closeness(pNow), Math.min(1.2, 0.2 + 1.4 * Math.abs(pNow - p)));
+    return 0.2 + 0.8 * closeness(p);
+  }
+
+  /** One game, scored for the whole country. */
+  function scoreNational(ix, g) {
+    const p = pHome(ix, g), pNow = liveP(ix, g);
+    const title = titleImpact(ix, g), playoff = playoffImpact(ix, g, p);
+    const tS = title ? toStars(title.raw, NAT_STEPS.title) : 0, pS = playoff ? toStars(playoff.raw, NAT_STEPS.playoff) : 0;
+    const fbs = isFBS(ix, g.home) && isFBS(ix, g.away);
+    const stakes = Math.max(tS, pS) + 0.5 * Math.min(tS, pS) + (fbs ? NAT_FLOOR : 0);
+    const dr = drama(g, p, pNow);
+    const h = new Date(g.date).getUTCHours();
+    const spec = [g.home, g.away].filter((t) => (ix.teams.get(t) || {}).rank).length + (g.timeValid !== false && (h >= 23 || h < 4) ? 0.5 : 0);
+    const priority = stakes * dr + 0.25 * spec;
+    const pre = { ...g, state: "pre", done: false, winner: null };
+    const prePriority = stakes * drama(pre, p, p) + 0.25 * spec;
+    const tR = title && titleReason(ix, g, title), pR = playoff && playoffReason(ix, g, playoff);
+    // The bigger stake leads; a finished game whose playoff crossing didn't happen falls back.
+    const lead = tS >= pS ? (tR ? "title" : pR ? "playoff" : null) : pR ? "playoff" : tR ? "title" : null;
+    return {
+      game: g, p, pNow, pick: null, mine: false, signals: [],
+      title, playoff, stakes: { title: tS, playoff: pS }, drama: dr, priority, prePriority,
+      stars: Math.round(toStars(priority, OVERALL_STEPS) * 2) / 2,
+      preStars: Math.round(toStars(prePriority, OVERALL_STEPS) * 2) / 2,
+      lead, reason: lead === "title" ? tR : lead === "playoff" ? pR : null,
+      upset: bigUpset(g, p), fbs,
+    };
+  }
+
+  /** Every game of `week`, scored for the whole country, most interesting first. */
+  function scoreNationalWeek(ix, week) {
+    const rows = ix.data.games.filter((g) => g.week === week && !g.canceled && (isFBS(ix, g.home) || isFBS(ix, g.away))).map((g) => scoreNational(ix, g));
+    rows.sort((a, b) => b.priority - a.priority || a.game.date.localeCompare(b.game.date));
+    let fives = 0;
+    for (const r of rows) if (r.stars === 5 && ++fives > MAX_FIVES) r.stars = 4.5;
+    return rows;
+  }
+
+  /** Filters for the national page: "all", "top25" (either team ranked), or a conference id
+   * (either team in it). */
+  function inFilter(ix, g, f) {
+    if (!f || f === "all") return true;
+    const H = ix.teams.get(g.home) || {}, A = ix.teams.get(g.away) || {};
+    if (f === "top25") return !!(H.rank || A.rank);
+    return H.conf === f || A.conf === f;
+  }
+
+  /** Who a team is, for a reader who doesn't follow it: record, title-race standing, and its
+   * last result before game g. [strings]. */
+  function about(ix, tid, g) {
+    const T = ix.teams.get(tid);
+    if (!T || !isFBS(ix, tid)) return [];
+    const out = [];
+    const r = T.record, cn = (ix.data.confs[T.conf] || {}).name;
+    if (r && r[0] + r[1]) out.push(`${r[0]}-${r[1]}${T.conf !== "18" && r[2] + r[3] ? ` (${r[2]}-${r[3]} ${cn})` : ""}`);
+    const race = ix.data.confOdds[T.conf], st = race && race.teams[tid];
+    if (st) out.push(st.clinched ? `in the ${race.name} title game` : st.eliminated ? `out of the ${race.name} race` : `${pct(st.p)} to reach the ${race.name} title game`);
+    const last = (ix.played.get(tid) || []).filter((x) => x !== g && before(x, g)).pop();
+    if (last) {
+      const opp = last.home === tid ? last.away : last.home, won = last.winner === tid;
+      const [us, them] = last.home === tid ? [last.homeScore, last.awayScore] : [last.awayScore, last.homeScore];
+      out.push(`last ${won ? "beat" : "lost to"} ${ranked(ix, opp)}${us != null ? ` ${us}-${them}` : ""}`);
+    }
+    return out;
+  }
+
   // ---- after the final: records before and after a finished game -------------------------
 
   /** Games in the order they were played (kickoff, then id, so a tie still has an order). */
@@ -834,7 +999,7 @@
     return ((t && rivalsJson[t.abbr]) || []).map((a) => ix.byAbbr.get(a)).filter(Boolean);
   }
 
-  const api = { SIGNALS, DEFAULT_WEIGHTS, STAR_STEPS, lines, toStars, index, pHome, liveP, name, scoreGame, scoreWeek, headline, liveInterest, defaultRivals, pct, aftermath };
+  const api = { SIGNALS, DEFAULT_WEIGHTS, STAR_STEPS, lines, toStars, index, pHome, liveP, name, scoreGame, scoreWeek, headline, liveInterest, defaultRivals, pct, aftermath, NAT_STEPS, scoreNational, scoreNationalWeek, inFilter, about };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.FanScore = api;
 })(typeof self !== "undefined" ? self : this);
